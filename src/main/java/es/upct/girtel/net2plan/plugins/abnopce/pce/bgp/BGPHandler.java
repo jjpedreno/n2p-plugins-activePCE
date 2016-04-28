@@ -128,6 +128,7 @@ public class BGPHandler extends RequestHandler
 						catch(Throwable e)
 						{
 							System.out.println(">> Error handling BGPUpdate");
+							e.printStackTrace(); //DEBUG
 							ErrorHandling.addErrorOrException(e, BGPHandler.class);
 						}
 						

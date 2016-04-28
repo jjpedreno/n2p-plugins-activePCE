@@ -11,7 +11,9 @@ import com.net2plan.internal.ErrorHandling;
 import com.net2plan.internal.plugins.IGUIModule;
 import com.net2plan.internal.plugins.PluginSystem;
 import com.net2plan.libraries.WDMUtils;
-import com.net2plan.utils.*;
+import com.net2plan.utils.IntUtils;
+import com.net2plan.utils.StringUtils;
+import com.net2plan.utils.Triple;
 import es.tid.bgp.bgp4.messages.*;
 import es.tid.bgp.bgp4.open.BGP4CapabilitiesOptionalParameter;
 import es.tid.bgp.bgp4.open.BGP4Capability;
@@ -25,7 +27,10 @@ import es.tid.bgp.bgp4.update.tlv.LocalNodeDescriptorsTLV;
 import es.tid.bgp.bgp4.update.tlv.ProtocolIDCodes;
 import es.tid.bgp.bgp4.update.tlv.RemoteNodeDescriptorsTLV;
 import es.tid.bgp.bgp4.update.tlv.RoutingUniverseIdentifierTypes;
-import es.tid.bgp.bgp4.update.tlv.node_link_prefix_descriptor_subTLVs.*;
+import es.tid.bgp.bgp4.update.tlv.node_link_prefix_descriptor_subTLVs.IGPRouterIDNodeDescriptorSubTLV;
+import es.tid.bgp.bgp4.update.tlv.node_link_prefix_descriptor_subTLVs.IPv4InterfaceAddressLinkDescriptorsSubTLV;
+import es.tid.bgp.bgp4.update.tlv.node_link_prefix_descriptor_subTLVs.IPv4NeighborAddressLinkDescriptorSubTLV;
+import es.tid.bgp.bgp4.update.tlv.node_link_prefix_descriptor_subTLVs.LinkLocalRemoteIdentifiersLinkDescriptorSubTLV;
 import es.tid.pce.pcep.constructs.*;
 import es.tid.pce.pcep.messages.*;
 import es.tid.pce.pcep.objects.*;
@@ -73,6 +78,7 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 	private JPanel loadBalancingPanel;
 	private Thread pcepThread, bgplsThread;
 	private Socket pcepSocket, bgplsSocket;
+	private Map<Long, Set<Long>> routeOriginalLinks;
 	
 	public static void main(String[] args)
 	{
@@ -116,6 +122,8 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 	@Override
 	public void configure(JPanel contentPane)
 	{
+		routeOriginalLinks = new HashMap<>();
+
 		txt_ip = new JTextField(getCurrentOptions().get("pce.defaultIP"));
 
 		sourceNode = new WiderJComboBox();
@@ -214,6 +222,9 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 				long linkId = (Long) ((StringLabeller) fiberFailureSelector.getSelectedItem()).getObject();
 				NetPlan netPlan = getDesign();
 
+				netPlan.setLinkDown(0, linkId);
+				if (netPlan.getLayerDefaultId() == 0) getTopologyPanel().getCanvas().setLinkDown(linkId);
+
 				updateOperationLog("Simulating failure");
 
 				try
@@ -231,8 +242,7 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 					return;
 				}
 
-				netPlan.setLinkDown(0, linkId);
-				if (netPlan.getLayerDefaultId() == 0) getTopologyPanel().getCanvas().setLinkDown(linkId);
+
 
 				if (fiberFailureSelector.getItemCount() == 0) failFiber.setVisible(false);
 		
@@ -482,7 +492,7 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 			or.setValue(PathAttributesTypeCode.PATH_ATTRIBUTE_ORIGIN_IGP);
 			ArrayList<PathAttribute> pathAttributes = new ArrayList<PathAttribute>();
 			pathAttributes.add(or);
-			PathAttribute mpReachAttribute = isUp ? new Generic_MP_Reach_Attribute() : new Generic_MP_Reach_Attribute(); //FIXME mp_reach OR mp_unreach
+			PathAttribute mpReachAttribute = isUp ? new Generic_MP_Reach_Attribute() : new Generic_MP_Unreach_Attribute();
 			pathAttributes.add(mpReachAttribute);
 
 	//					if (layerId == 10)
@@ -930,7 +940,11 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 										seqWavelengths.add(wavelengthId);
 									}
 								}
-								
+
+								/* Map of original sequence of fibers */
+								Set<Long> originalSeqFIbers = new LinkedHashSet<Long>(netPlan.getRouteSequenceOfLinks(0, routeId_lowerLayer));
+								routeOriginalLinks.put(routeId_lowerLayer, originalSeqFIbers);
+
 								netPlan.setRouteSequenceOfLinks(0, routeId_lowerLayer, seqFibers);
 								WDMUtils.setLightpathSeqWavelengths(netPlan, 0, routeId_lowerLayer, IntUtils.toArray(seqWavelengths));
 								netPlan.setRouteUp(0, routeId_lowerLayer);
@@ -1030,7 +1044,7 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 									}
 								}
 
-								netPlan.addRoute(1, demandId, bandwidthInGbps, seqLinks, null);
+								netPlan.addRoute(1, demandId, bandwidthInGbps, seqLinks, null); //FIXME error al añadir dos demandas seguidas con mismo origen y destino
 	
 								PCEPReport report1 = new PCEPReport();
 								report1.setStateReportList(new LinkedList<StateReport>());
@@ -1067,5 +1081,36 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 				shutdown();
 			}
 		}
+	}
+
+	@Override
+	public void showRoute(long layerId, long routeId)
+	{
+		System.out.println("Showing route!"); //DEBUG
+		selectNetPlanViewItem(layerId, Constants.NetworkElementType.ROUTE, routeId);
+
+		NetPlan currentState = getDesign();
+		NetPlan initialState = getInitialDesign();
+		Set<Long> pri_seqLinks = new LinkedHashSet<Long>(currentState.convertSequenceOfLinksAndProtectionSegmentsToSequenceOfLinks(currentState.getRouteSequenceOfLinks(routeId)));
+		Set<Long> sec_seqLinks = new LinkedHashSet<Long>();
+
+		if(routeOriginalLinks.get(routeId) != null)
+			sec_seqLinks = routeOriginalLinks.get(routeId);
+
+		if (allowShowInitialNetPlan())
+		{
+			if (initialState.isLayerActive(layerId) && initialState.isRouteActive(layerId, routeId))
+				sec_seqLinks = new LinkedHashSet<Long>(initialState.convertSequenceOfLinksAndProtectionSegmentsToSequenceOfLinks(layerId, initialState.getRouteSequenceOfLinks(layerId, routeId)));
+
+			Iterator<Long> linkIt = sec_seqLinks.iterator();
+			while(linkIt.hasNext())
+			{
+				long linkId = linkIt.next();
+				if (!currentState.isLinkActive(linkId)) linkIt.remove();
+			}
+		}
+
+		topologyPanel.getCanvas().showRoutes(pri_seqLinks, sec_seqLinks);
+		topologyPanel.getCanvas().refresh();
 	}
 }
