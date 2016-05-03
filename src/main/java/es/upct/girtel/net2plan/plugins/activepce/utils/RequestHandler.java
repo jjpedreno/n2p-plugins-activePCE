@@ -1,11 +1,13 @@
 /*
- * Copyright (c) $year Jose-Juan Pedreno-Manresa Jose-Luis Izquierdo-Zaragoza Pablo Pavon-Marino, .
- *   All rights reserved. This program and the accompanying materials
+ *  Copyright (c) 2016 Jose-Juan Pedreno-Manresa, Jose-Luis Izquierdo-Zaragoza, Pablo Pavon-Marino
+ *  All rights reserved. This program and the accompanying materials
  *  are made available under the terms of the GNU Lesser Public License v3
  *  which accompanies this distribution, and is available at
- * http://www.gnu.org/licenses/lgpl.html
+ *  http://www.gnu.org/licenses/lgpl.html
  *
  *  Contributors:
+ *          Jose-Juan Pedreno-Manresa
+ *          Jose-Luis Izquierdo-Zaragoza
  */
 
 package es.upct.girtel.net2plan.plugins.activepce.utils;
@@ -16,9 +18,6 @@ import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.Socket;
 
-/**
- * Created by Kuranes on 31/03/2015.
- */
 public abstract class RequestHandler
 {
 	protected Socket       _socket;

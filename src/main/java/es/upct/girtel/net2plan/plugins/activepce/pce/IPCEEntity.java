@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) $year Jose-Juan Pedreno-Manresa, Jose-Luis Izquierdo-Zaragoza, Pablo Pavon-Marino
+ *  Copyright (c) 2016 Jose-Juan Pedreno-Manresa, Jose-Luis Izquierdo-Zaragoza, Pablo Pavon-Marino
  *  All rights reserved. This program and the accompanying materials
  *  are made available under the terms of the GNU Lesser Public License v3
  *  which accompanies this distribution, and is available at
@@ -15,40 +15,36 @@ package es.upct.girtel.net2plan.plugins.activepce.pce;
 import com.net2plan.interfaces.networkDesign.NetPlan;
 import es.tid.bgp.bgp4.messages.BGP4Message;
 import es.tid.pce.pcep.messages.PCEPMessage;
+import es.upct.girtel.net2plan.plugins.activepce.pce.bgp.BGPHandler;
+import es.upct.girtel.net2plan.plugins.activepce.pce.pcep.PCEPHandler;
+
 import java.util.List;
 
-import es.upct.girtel.net2plan.plugins.activepce.pce.pcep.PCEPHandler;
-import es.upct.girtel.net2plan.plugins.activepce.pce.bgp.BGPHandler;
-
-/**
- *
- * @author Jose Luis
- */
 public abstract class IPCEEntity
 {
-	protected NetPlan netPlan;
-	protected boolean isBGPRegistered, isPCEPRegistered;
-	protected BGPHandler  bgpHandler;
-	protected PCEPHandler pcepHandler;
+	protected NetPlan _netPlan;
+	protected boolean _isBGPRegistered, _isPCEPRegistered;
+	protected BGPHandler  _bgpHandler;
+	protected PCEPHandler _pcepHandler;
 
 	public IPCEEntity()
 	{
-		netPlan = new NetPlan();
-		isBGPRegistered = false;
-		isPCEPRegistered = false;
+		_netPlan = new NetPlan();
+		_isBGPRegistered = false;
+		_isPCEPRegistered = false;
 	}
 
 	public boolean isValid()
 	{
-		return isBGPRegistered && isPCEPRegistered;
+		return _isBGPRegistered && _isPCEPRegistered;
 	}
-	
-	public BGPHandler getBGPHandler() { return bgpHandler; }
-	
-	public NetPlan getNetworkState() { return netPlan.unmodifiableView(); }
 
-	public PCEPHandler getPCEPHandler() { return pcepHandler; }
-	
+	public BGPHandler getBGPHandler(){ return _bgpHandler; }
+
+	public NetPlan getNetworkState(){ return _netPlan.copy(); }
+
+	public PCEPHandler getPCEPHandler(){ return _pcepHandler; }
+
 	public abstract List handleBGPMessage(BGP4Message message);
 
 	public abstract List handlePCEPMessage(PCEPMessage message);

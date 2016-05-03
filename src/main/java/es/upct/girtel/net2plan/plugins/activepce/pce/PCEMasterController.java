@@ -1,11 +1,13 @@
 /*
- * Copyright (c) $year Jose-Juan Pedreno-Manresa Jose-Luis Izquierdo-Zaragoza Pablo Pavon-Marino, .
- *   All rights reserved. This program and the accompanying materials
+ *  Copyright (c) 2016 Jose-Juan Pedreno-Manresa, Jose-Luis Izquierdo-Zaragoza, Pablo Pavon-Marino
+ *  All rights reserved. This program and the accompanying materials
  *  are made available under the terms of the GNU Lesser Public License v3
  *  which accompanies this distribution, and is available at
- * http://www.gnu.org/licenses/lgpl.html
+ *  http://www.gnu.org/licenses/lgpl.html
  *
  *  Contributors:
+ *          Jose-Juan Pedreno-Manresa
+ *          Jose-Luis Izquierdo-Zaragoza
  */
 
 package es.upct.girtel.net2plan.plugins.activepce.pce;
@@ -26,7 +28,7 @@ public class PCEMasterController
 
 	private PCEMasterController()
 	{
-		_entityMap = new HashMap<InetAddress, IPCEEntity>();
+		_entityMap = new HashMap<>();
 	}
 	
 	public Set<InetAddress> getActiveSessions()
@@ -46,8 +48,8 @@ public class PCEMasterController
 		else
 		{
 			entity = new BasicPCEPBGPLSSpeaker();
-			entity.isPCEPRegistered = true;
-			entity.pcepHandler = pcepHandler;
+			entity._isPCEPRegistered = true;
+			entity._pcepHandler = pcepHandler;
 			_entityMap.put(ip, entity);
 			return true;
 		}
@@ -63,8 +65,8 @@ public class PCEMasterController
 		}
 		else
 		{
-			entity.isBGPRegistered = true;
-			entity.bgpHandler = bgpHandler;
+			entity._isBGPRegistered = true;
+			entity._bgpHandler = bgpHandler;
 			return true;
 		}
 	}

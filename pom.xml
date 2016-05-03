@@ -23,15 +23,14 @@
             <version>1.3.0</version>
         </dependency>
         <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <version>4.12</version>
-        </dependency>
-        <dependency>
             <groupId>local</groupId>
             <artifactId>Net2Plan-lib</artifactId>
             <version>1.0</version>
-            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.12</version>
         </dependency>
         <dependency>
             <groupId>local</groupId>
@@ -122,7 +121,7 @@
                     </descriptorRefs>
                     <archive>
                         <manifest>
-                            <mainClass>es.upct.girtel.net2plan.plugins.abnopce.pce.PCEMainServer</mainClass>
+                            <mainClass>es.upct.girtel.net2plan.plugins.activepce.pce.PCEMainServer</mainClass>
                         </manifest>
                     </archive>
                 </configuration>

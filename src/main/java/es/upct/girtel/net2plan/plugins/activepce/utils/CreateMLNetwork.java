@@ -10,12 +10,9 @@ import com.net2plan.interfaces.networkDesign.NetPlan;
 import com.net2plan.libraries.WDMUtils;
 import com.net2plan.utils.IntUtils;
 import com.net2plan.utils.Triple;
+
 import java.awt.geom.Point2D;
-import java.util.LinkedHashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  *
@@ -25,20 +22,20 @@ public class CreateMLNetwork implements IAlgorithm
 {
 	public static void main(String[] args)
 	{
-//		NetPlan netPlan = new NetPlan(new File("C:\\Users\\Jose Luis\\Documents\\NSFNet_N14_E42_multilayerPCE.n2p"));
+//		NetPlan _netPlan = new NetPlan(new File("C:\\Users\\Jose Luis\\Documents\\NSFNet_N14_E42_multilayerPCE.n2p"));
 //		IAlgorithm algorithm = new CreateMLNetwork();
 //		
-//		algorithm.executeAlgorithm(netPlan, null, null);
-//		netPlan.saveToFile(new File("C:\\Users\\Jose Luis\\Documents\\NSFNet_N14_E42_multilayerPCE.n2p"));
+//		algorithm.executeAlgorithm(_netPlan, null, null);
+//		_netPlan.saveToFile(new File("C:\\Users\\Jose Luis\\Documents\\NSFNet_N14_E42_multilayerPCE.n2p"));
 
-//		NetPlan netPlan = new NetPlan(new File("C:\\Net2Plan\\releases\\Net2Plan-0.3.0\\workspace\\data\\networkTopologies\\NSFNet_N14_E42.n2p"));
+//		NetPlan _netPlan = new NetPlan(new File("C:\\Net2Plan\\releases\\Net2Plan-0.3.0\\workspace\\data\\networkTopologies\\NSFNet_N14_E42.n2p"));
 //		IAlgorithm algorithm = new CreateMLNetwork();
 //		Map<String, String> parameters = new HashMap<String, String>();
 //		parameters.put("numWavelengthsPerFiber", "40");
 //		
-//		algorithm.executeAlgorithm(netPlan, parameters, null);
-//		netPlan.saveToFile(new File("C:\\Users\\Jose Luis\\Documents\\NSFNet_N14_E42_multilayerPCE.n2p"));
-//		netPlan.saveToFile(new File("C:\\Net2Plan\\releases\\Net2Plan-0.3.0\\workspace\\data\\networkTopologies\\NSFNet_N14_E42_multilayerPCE.n2p"));
+//		algorithm.executeAlgorithm(_netPlan, parameters, null);
+//		_netPlan.saveToFile(new File("C:\\Users\\Jose Luis\\Documents\\NSFNet_N14_E42_multilayerPCE.n2p"));
+//		_netPlan.saveToFile(new File("C:\\Net2Plan\\releases\\Net2Plan-0.3.0\\workspace\\data\\networkTopologies\\NSFNet_N14_E42_multilayerPCE.n2p"));
 	}
 	
 	@Override

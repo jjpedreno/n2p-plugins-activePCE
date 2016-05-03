@@ -1,3 +1,15 @@
+/*
+ *  Copyright (c) 2016 Jose-Juan Pedreno-Manresa, Jose-Luis Izquierdo-Zaragoza, Pablo Pavon-Marino
+ *  All rights reserved. This program and the accompanying materials
+ *  are made available under the terms of the GNU Lesser Public License v3
+ *  which accompanies this distribution, and is available at
+ *  http://www.gnu.org/licenses/lgpl.html
+ *
+ *  Contributors:
+ *          Jose-Juan Pedreno-Manresa
+ *          Jose-Luis Izquierdo-Zaragoza
+ */
+
 package es.upct.girtel.net2plan.plugins.activepce.pce;
 
 import com.net2plan.interfaces.networkDesign.Net2PlanException;
@@ -28,15 +40,15 @@ public class PCEMainServer extends ICLIModule
 
 		Scanner scanner = new Scanner(System.in);
 		
-		System.out.println("Starting PCEP & BGP/LS servers...");
+		System.out.println("Starting PCEP & BGP-LS servers...");
 		
-		PCEPServer servidorPCEP;
-		BGPServer servidorBGP;
+		PCEPServer serverPCEP;
+		BGPServer serverBGP;
 		
 		try
 		{
-			servidorPCEP = new PCEPServer();
-			servidorBGP = new BGPServer();
+			serverPCEP = new PCEPServer();
+			serverBGP = new BGPServer();
 		}
 		catch(Net2PlanException e)
 		{
@@ -48,10 +60,10 @@ public class PCEMainServer extends ICLIModule
 		}
 
 		/* Create and start PCE Server */
-		servidorPCEP.acceptConnections();
+		serverPCEP.acceptConnections();
 
 		/* Create and start BGP server */
-		servidorBGP.acceptConnections();
+		serverBGP.acceptConnections();
 		
 		System.out.println("PCE successfully started");
 		

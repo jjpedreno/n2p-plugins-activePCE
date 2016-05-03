@@ -1,23 +1,23 @@
 /*
- * Copyright (c) $year Jose-Juan Pedreno-Manresa Jose-Luis Izquierdo-Zaragoza Pablo Pavon-Marino, .
- *   All rights reserved. This program and the accompanying materials
+ *  Copyright (c) 2016 Jose-Juan Pedreno-Manresa, Jose-Luis Izquierdo-Zaragoza, Pablo Pavon-Marino
+ *  All rights reserved. This program and the accompanying materials
  *  are made available under the terms of the GNU Lesser Public License v3
  *  which accompanies this distribution, and is available at
- * http://www.gnu.org/licenses/lgpl.html
+ *  http://www.gnu.org/licenses/lgpl.html
  *
  *  Contributors:
+ *          Jose-Juan Pedreno-Manresa
+ *          Jose-Luis Izquierdo-Zaragoza
  */
 
 package es.upct.girtel.net2plan.plugins.activepce.utils;
 
 import com.net2plan.interfaces.networkDesign.Net2PlanException;
+
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
 
-/**
- * Created by Kuranes on 31/03/2015.
- */
 public abstract class GenericServer implements Runnable
 {
 	private int _listenPort;

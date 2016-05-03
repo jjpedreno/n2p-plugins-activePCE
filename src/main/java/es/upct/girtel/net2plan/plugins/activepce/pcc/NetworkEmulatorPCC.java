@@ -2,7 +2,6 @@ package es.upct.girtel.net2plan.plugins.activepce.pcc;
 
 import com.net2plan.gui.GUINet2Plan;
 import com.net2plan.gui.tools.IGUINetworkViewer;
-import com.net2plan.gui.tools.utils.CellRenderers;
 import com.net2plan.gui.utils.*;
 import com.net2plan.interfaces.networkDesign.Net2PlanException;
 import com.net2plan.interfaces.networkDesign.NetPlan;
@@ -500,7 +499,7 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 	//						LabelRangeField_UPCT lambdaSet = new LabelRangeField_UPCT();
 	//						lambdaSet.setAction(2); /* Inclusive set (draft-ietf-ccamp-general-constraint-encode-20, 2.6.2) */
 	//						lambdaSet.setStartLabel(0);
-	//						lambdaSet.setNumLabels(WDMUtils.getFiberNumWavelengths(netPlan, layerId, linkId));
+	//						lambdaSet.setNumLabels(WDMUtils.getFiberNumWavelengths(_netPlan, layerId, linkId));
 	//
 	//						AvailableLabels al = new AvailableLabels();
 	//						al.setLabelSet(lambdaSet);
