@@ -1,4 +1,4 @@
-package es.upct.girtel.net2plan.plugins.abnopce.utils;/*
+package es.upct.girtel.net2plan.plugins.activepce.utils;/*
  * Copyright (c) $year Jose-Juan Pedreno-Manresa Jose-Luis Izquierdo-Zaragoza Pablo Pavon-Marino, .
  *   All rights reserved. This program and the accompanying materials
  *  are made available under the terms of the GNU Lesser Public License v3

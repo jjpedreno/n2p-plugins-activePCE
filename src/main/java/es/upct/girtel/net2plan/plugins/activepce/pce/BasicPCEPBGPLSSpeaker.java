@@ -3,7 +3,7 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package es.upct.girtel.net2plan.plugins.abnopce.pce;
+package es.upct.girtel.net2plan.plugins.activepce.pce;
 
 import com.net2plan.cli.CLINet2Plan;
 import com.net2plan.interfaces.networkDesign.NetPlan;
@@ -39,7 +39,7 @@ import es.tid.rsvp.objects.subobjects.GeneralizedLabelEROSubobject;
 import es.tid.rsvp.objects.subobjects.IPv4prefixEROSubobject;
 import es.tid.rsvp.objects.subobjects.ServerLayerInfo;
 import es.tid.rsvp.objects.subobjects.UnnumberIfIDEROSubobject;
-import es.upct.girtel.net2plan.plugins.abnopce.utils.Utils;
+import es.upct.girtel.net2plan.plugins.activepce.utils.Utils;
 import org.apache.commons.collections15.Transformer;
 
 import java.net.Inet4Address;

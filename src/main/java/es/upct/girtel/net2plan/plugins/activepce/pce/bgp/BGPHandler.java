@@ -1,14 +1,16 @@
 /*
- * Copyright (c) $year Jose-Juan Pedreno-Manresa Jose-Luis Izquierdo-Zaragoza Pablo Pavon-Marino, .
- *   All rights reserved. This program and the accompanying materials
+ * Copyright (c) $year Jose-Juan Pedreno-Manresa, Jose-Luis Izquierdo-Zaragoza, Pablo Pavon-Marino
+ *  All rights reserved. This program and the accompanying materials
  *  are made available under the terms of the GNU Lesser Public License v3
  *  which accompanies this distribution, and is available at
- * http://www.gnu.org/licenses/lgpl.html
+ *  http://www.gnu.org/licenses/lgpl.html
  *
- *  Contributors:
+ *   Contributors:
+ *         Jose-Juan Pedreno-Manresa
+ *         Jose-Luis Izquierdo-Zaragoza
  */
 
-package es.upct.girtel.net2plan.plugins.abnopce.pce.bgp;
+package es.upct.girtel.net2plan.plugins.activepce.pce.bgp;
 
 import com.net2plan.internal.ErrorHandling;
 import es.tid.bgp.bgp4.messages.*;
@@ -19,9 +21,9 @@ import es.tid.bgp.bgp4.open.MultiprotocolExtensionCapabilityAdvertisement;
 import es.tid.bgp.bgp4.update.fields.pathAttributes.AFICodes;
 import es.tid.bgp.bgp4.update.fields.pathAttributes.SAFICodes;
 import es.tid.pce.pcep.messages.PCEPMessage;
-import es.upct.girtel.net2plan.plugins.abnopce.pce.PCEMasterController;
-import es.upct.girtel.net2plan.plugins.abnopce.utils.RequestHandler;
-import es.upct.girtel.net2plan.plugins.abnopce.utils.Utils;
+import es.upct.girtel.net2plan.plugins.activepce.pce.PCEMasterController;
+import es.upct.girtel.net2plan.plugins.activepce.utils.RequestHandler;
+import es.upct.girtel.net2plan.plugins.activepce.utils.Utils;
 
 import java.io.IOException;
 import java.net.Inet4Address;

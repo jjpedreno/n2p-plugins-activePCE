@@ -1,10 +1,10 @@
-package es.upct.girtel.net2plan.plugins.abnopce.pce;
+package es.upct.girtel.net2plan.plugins.activepce.pce;
 
 import com.net2plan.interfaces.networkDesign.Net2PlanException;
 import com.net2plan.internal.plugins.ICLIModule;
 import com.net2plan.utils.Triple;
-import es.upct.girtel.net2plan.plugins.abnopce.pce.bgp.BGPServer;
-import es.upct.girtel.net2plan.plugins.abnopce.pce.pcep.PCEPServer;
+import es.upct.girtel.net2plan.plugins.activepce.pce.bgp.BGPServer;
+import es.upct.girtel.net2plan.plugins.activepce.pce.pcep.PCEPServer;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 

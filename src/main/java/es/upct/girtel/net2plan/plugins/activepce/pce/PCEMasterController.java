@@ -8,11 +8,11 @@
  *  Contributors:
  */
 
-package es.upct.girtel.net2plan.plugins.abnopce.pce;
+package es.upct.girtel.net2plan.plugins.activepce.pce;
 
 
-import es.upct.girtel.net2plan.plugins.abnopce.pce.bgp.BGPHandler;
-import es.upct.girtel.net2plan.plugins.abnopce.pce.pcep.PCEPHandler;
+import es.upct.girtel.net2plan.plugins.activepce.pce.bgp.BGPHandler;
+import es.upct.girtel.net2plan.plugins.activepce.pce.pcep.PCEPHandler;
 
 import java.net.InetAddress;
 import java.util.HashMap;

@@ -1,7 +1,7 @@
-package es.upct.girtel.net2plan.plugins.abnopce.pce.bgp;
+package es.upct.girtel.net2plan.plugins.activepce.pce.bgp;
 
-import es.upct.girtel.net2plan.plugins.abnopce.utils.Constants;
-import es.upct.girtel.net2plan.plugins.abnopce.utils.GenericServer;
+import es.upct.girtel.net2plan.plugins.activepce.utils.Constants;
+import es.upct.girtel.net2plan.plugins.activepce.utils.GenericServer;
 
 import java.io.IOException;
 import java.net.Socket;

@@ -1,4 +1,4 @@
-package es.upct.girtel.net2plan.plugins.abnopce.pcc;
+package es.upct.girtel.net2plan.plugins.activepce.pcc;
 
 import com.net2plan.gui.GUINet2Plan;
 import com.net2plan.gui.tools.IGUINetworkViewer;
@@ -39,8 +39,8 @@ import es.tid.rsvp.objects.subobjects.EROSubobject;
 import es.tid.rsvp.objects.subobjects.GeneralizedLabelEROSubobject;
 import es.tid.rsvp.objects.subobjects.IPv4prefixEROSubobject;
 import es.tid.rsvp.objects.subobjects.UnnumberIfIDEROSubobject;
-import es.upct.girtel.net2plan.plugins.abnopce.utils.LoadBalancing_UPCT;
-import es.upct.girtel.net2plan.plugins.abnopce.utils.Utils;
+import es.upct.girtel.net2plan.plugins.activepce.utils.LoadBalancing_UPCT;
+import es.upct.girtel.net2plan.plugins.activepce.utils.Utils;
 import net.miginfocom.swing.MigLayout;
 
 import javax.swing.*;
@@ -763,7 +763,7 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 				/* Start socket */
 				InetAddress pceIPAddress = Inet4Address.getByName(txt_ip.getText());
 				updateOperationLog("Connecting to BGP/LS in " + pceIPAddress);
-				bgplsSocket = new Socket(pceIPAddress, es.upct.girtel.net2plan.plugins.abnopce.utils.Constants.BGP_SERVER_PORT);
+				bgplsSocket = new Socket(pceIPAddress, es.upct.girtel.net2plan.plugins.activepce.utils.Constants.BGP_SERVER_PORT);
 				InputStream inBGP = bgplsSocket.getInputStream();
 				OutputStream outBGP = bgplsSocket.getOutputStream();
 				
@@ -850,7 +850,7 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 				/* Start socket */
 				InetAddress pceIPAddress = Inet4Address.getByName(txt_ip.getText());
 				updateOperationLog("Connecting to PCE in " + pceIPAddress);
-				pcepSocket = new Socket(pceIPAddress, es.upct.girtel.net2plan.plugins.abnopce.utils.Constants.PCEP_SERVER_PORT);
+				pcepSocket = new Socket(pceIPAddress, es.upct.girtel.net2plan.plugins.activepce.utils.Constants.PCEP_SERVER_PORT);
 				InputStream inPCEP = pcepSocket.getInputStream();
 				OutputStream outPCEP = pcepSocket.getOutputStream();
 				
