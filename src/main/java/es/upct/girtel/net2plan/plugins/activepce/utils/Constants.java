@@ -24,9 +24,12 @@ public class Constants
 	public final static int     WDM_LAYER_INDEX            = 0;
 	public final static int     IP_LAYER_INDEX             = 1;
 
-	public final static String ATTRIBUTE_IP_ADDRESS = "ipAddress";
-	public final static String ATTRIBUTE_NODE_TYPE  = "type";
-	public final static String ATTRIBUTE_REQUEST_ID = "requestId";
+	public final static String ATTRIBUTE_IP_ADDRESS            = "ipAddress";
+	public final static String ATTRIBUTE_NODE_TYPE             = "type";
+	public final static String ATTRIBUTE_REQUEST_ID            = "requestId";
+	public final static String ATTRIBUTE_SOURCE_INTERFACE      = "srcIf";
+	public final static String ATTRIBUTE_DESTINATION_INTERFACE = "dstIf";
+	public final static String ATTRIBUTE_LSP_ID                = "lspId";
 
 	public final static String NODE_TYPE_ROUTER = "ipRouter";
 	public final static String NODE_TYPE_ROADM  = "roadm";

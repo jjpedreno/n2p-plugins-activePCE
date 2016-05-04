@@ -91,6 +91,13 @@
             <version>1.0</version>
             <scope>provided</scope>
         </dependency>
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>parallelcolt-0.10.1</artifactId>
+            <version>1.0</version>
+            <scope>provided</scope>
+        </dependency>
+
     </dependencies>
 
     <repositories>

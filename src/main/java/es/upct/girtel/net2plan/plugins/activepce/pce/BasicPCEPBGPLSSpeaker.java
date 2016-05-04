@@ -12,12 +12,11 @@
 
 package es.upct.girtel.net2plan.plugins.activepce.pce;
 
+import cern.colt.matrix.tdouble.DoubleMatrix2D;
 import com.net2plan.interfaces.networkDesign.*;
 import com.net2plan.libraries.GraphUtils;
 import com.net2plan.libraries.WDMUtils;
-import com.net2plan.utils.LongUtils;
 import com.net2plan.utils.Pair;
-import edu.uci.ics.jung.algorithms.shortestpath.DijkstraShortestPath;
 import es.tid.bgp.bgp4.messages.BGP4Message;
 import es.tid.bgp.bgp4.messages.BGP4MessageTypes;
 import es.tid.bgp.bgp4.messages.BGP4Update;
@@ -42,7 +41,6 @@ import es.tid.rsvp.objects.subobjects.ServerLayerInfo;
 import es.tid.rsvp.objects.subobjects.UnnumberIfIDEROSubobject;
 import es.upct.girtel.net2plan.plugins.activepce.utils.Constants;
 import es.upct.girtel.net2plan.plugins.activepce.utils.Utils;
-import org.apache.commons.collections15.Transformer;
 
 import java.net.Inet4Address;
 import java.net.InetAddress;
@@ -53,6 +51,7 @@ public class BasicPCEPBGPLSSpeaker extends IPCEEntity
 {
 	private final Map<InetAddress, Long> _ipNodeIdMap;
 	private       NetworkLayer           _wdmLayer, _ipLayer;
+	private final DoubleMatrix2D _wavelengthFiberOccupancy;
 
 	public BasicPCEPBGPLSSpeaker()
 	{
@@ -62,6 +61,7 @@ public class BasicPCEPBGPLSSpeaker extends IPCEEntity
 		_netPlan.setRoutingType(com.net2plan.utils.Constants.RoutingType.SOURCE_ROUTING, _wdmLayer);
 		_ipLayer = _netPlan.addLayer("IP", "IP Layer", null, null, null);
 		_netPlan.setRoutingType(com.net2plan.utils.Constants.RoutingType.SOURCE_ROUTING, _ipLayer);
+		_wavelengthFiberOccupancy = WDMUtils.getMatrixWavelength2FiberOccupancy(_netPlan, true, _wdmLayer);
 
 	}
 
@@ -118,43 +118,6 @@ public class BasicPCEPBGPLSSpeaker extends IPCEEntity
 		}
 
 		return outMsg;
-	}
-
-	private long addLightpath(NetPlan netPlan, long originNodeId, long destinationNodeId)
-	{
-		if(! fiberTopology_currentState.containsVertex(originNodeId) || ! fiberTopology_currentState.containsVertex(destinationNodeId))
-			return - 1;
-
-		double bestCost = Double.MAX_VALUE;
-		List<Long> bestSeqFibers = null;
-		int bestW = - 1;
-		for(int wavelengthId = 0; wavelengthId < Constants.W; wavelengthId++)
-		{
-			Set<Long> fibersToOmit_thisWavelength = new HashSet<Long>(wavelengthFiberOccupancy.get(wavelengthId));
-			Transformer<Long, Double> fiberWeightTransformer_thisWavelength = new WavelengthOccupancyTransformer(null, fibersToOmit_thisWavelength);
-			DijkstraShortestPath<Long, Long> dsp = new DijkstraShortestPath<Long, Long>(fiberTopology_currentState, fiberWeightTransformer_thisWavelength);
-
-			Number pathCost = dsp.getDistance(originNodeId, destinationNodeId);
-			if(pathCost.doubleValue() == Double.MAX_VALUE) continue;
-
-			if(pathCost.doubleValue() < bestCost)
-			{
-				bestCost = pathCost.doubleValue();
-				bestSeqFibers = dsp.getPath(originNodeId, destinationNodeId);
-				bestW = wavelengthId;
-			}
-		}
-
-		if(bestSeqFibers == null) return - 1;
-
-		long lpDemandId = netPlan.addDemand(wdmLayerId, originNodeId, destinationNodeId, Constants.LIGHTPATH_BINARY_RATE_GBPS, null);
-		long lpRouteId = netPlan.addRoute(wdmLayerId, lpDemandId, Constants.LIGHTPATH_BINARY_RATE_GBPS, 1, bestSeqFibers, null);
-		WDMUtils.allocateResources(bestSeqFibers, bestW, wavelengthFiberOccupancy);
-		WDMUtils.setLightpathSeqWavelengths(netPlan, wdmLayerId, lpRouteId, bestW);
-		netPlan.setRouteAttribute(wdmLayerId, lpRouteId, "lspId", Long.toString(lpRouteId));
-
-		long lightpathId = netPlan.createUpperLayerLinkFromDemand(wdmLayerId, lpDemandId, ipLayerId);
-		return lightpathId;
 	}
 
 	private Pair<Path, Bandwidth> generateMultiLayerPath(NetPlan netPlan, long originLinkId, long lightpathId, long destinationLinkId, float bandwidthInGbps)
@@ -245,7 +208,7 @@ public class BasicPCEPBGPLSSpeaker extends IPCEEntity
 				ero.addEROSubobject(eroSubObject_thisLink);
 
 				destinationLinkId = link.getId();
-				if(Constants.DEBUG) System.out.println("\t\t"+Utils.getLinkSourceIPAddress(_netPlan, link.getId()).getHostAddress());
+				if(Constants.DEBUG) System.out.println("\t\t" + Utils.getLinkSourceIPAddress(_netPlan, link.getId()).getHostAddress());
 			}
 
 			IPv4prefixEROSubobject eroSubObject_destinationNode = new IPv4prefixEROSubobject();
@@ -259,8 +222,8 @@ public class BasicPCEPBGPLSSpeaker extends IPCEEntity
 
 			if(Constants.DEBUG)
 			{
-				System.out.println("\t\t"+Utils.getLinkDestinationIPAddress(_netPlan, destinationLinkId));
-				System.out.println("\t\tBandwidth = "+bw.getBw());
+				System.out.println("\t\t" + Utils.getLinkDestinationIPAddress(_netPlan, destinationLinkId));
+				System.out.println("\t\tBandwidth = " + bw.getBw());
 			}
 
 			return Pair.of(path, (Bandwidth) bw);
@@ -327,43 +290,40 @@ public class BasicPCEPBGPLSSpeaker extends IPCEEntity
 
 	private List handleFailureReparationEvent() //FIXME ver que hace aquí
 	{
-		System.out.println("Handling failure event!"); //DEBUG
+		if(Constants.DEBUG) System.out.println("\tHandling failure event!"); //DEBUG
 		try
 		{
 			List outMsg = new LinkedList();
 
 			LinkedList<UpdateRequest> updateList = new LinkedList<UpdateRequest>();
-			Set<Long> affectedLightpathRoutes = new LinkedHashSet<Long>(_netPlan.getRoutesDown(wdmLayerId));
-			for(long lpRouteId : affectedLightpathRoutes)
+			List<Route> affectedLightpathRoutes = _netPlan.getRoutes(_wdmLayer);
+			for(Route lpRoute : affectedLightpathRoutes)
 			{
-				System.out.println("Route " + lpRouteId + " DOWN"); //DEBUG
-				List<Long> seqFibers = _netPlan.getRouteSequenceOfLinks(wdmLayerId, lpRouteId);
-				int[] seqWavelengths = WDMUtils.getLightpathSeqWavelengths(_netPlan, wdmLayerId, lpRouteId);
-				WDMUtils.releaseResources(seqFibers, seqWavelengths, wavelengthFiberOccupancy);
+				if(Constants.DEBUG) System.out.println("\t\tRoute down: " + lpRoute.getIndex());
+				List<Link> seqFibers = lpRoute.getSeqLinksRealPath();
+				int[] seqWavelengths = WDMUtils.getLightpathSeqWavelengths(lpRoute);
+				WDMUtils.releaseResources(seqFibers, seqWavelengths, _wavelengthFiberOccupancy, null, null);
 
-				long originNodeId = _netPlan.getRouteIngressNode(wdmLayerId, lpRouteId);
-				long destinationNodeId = _netPlan.getRouteEgressNode(wdmLayerId, lpRouteId);
+				Node originNode = lpRoute.getIngressNode();
+				Node destinationNode = lpRoute.getEgressNode();
 
-				int chosenWavelengthId = - 1;
-				for(int wavelengthId = 0; wavelengthId < Constants.W; wavelengthId++)
+				List<Node> nodesUp = new LinkedList<>(_netPlan.getNodesUp());
+				List<Link> linksUP = new LinkedList<>(_netPlan.getLinksUp(_wdmLayer));
+
+				List<List<Link>> cpl = GraphUtils.getKLooplessShortestPaths(nodesUp, linksUP, originNode, destinationNode, null, 5, - 1, - 1, - 1, - 1, - 1, - 1);
+				int[] wavelengths = new int[0];
+
+				for(List<Link> cp : cpl)
 				{
-					Set<Long> fibersToOmit_thisWavelength = new HashSet<Long>(wavelengthFiberOccupancy.get(wavelengthId));
-					Transformer<Long, Double> fiberWeightTransformer_thisWavelength = new WavelengthOccupancyTransformer(null, fibersToOmit_thisWavelength);
-					DijkstraShortestPath<Long, Long> dsp = new DijkstraShortestPath<Long, Long>(fiberTopology_currentState, fiberWeightTransformer_thisWavelength);
-
-					Number pathCost = dsp.getDistance(originNodeId, destinationNodeId);
-					if(pathCost.doubleValue() == Double.MAX_VALUE) continue;
-
-					List<Long> newSeqFibers = dsp.getPath(originNodeId, destinationNodeId);
-					_netPlan.setRouteSequenceOfLinks(wdmLayerId, lpRouteId, newSeqFibers);
-					WDMUtils.allocateResources(newSeqFibers, wavelengthId, wavelengthFiberOccupancy);
-					WDMUtils.setLightpathSeqWavelengths(_netPlan, wdmLayerId, lpRouteId, wavelengthId);
-
-					chosenWavelengthId = wavelengthId;
-					_netPlan.setRouteUp(wdmLayerId, lpRouteId);
-					System.out.println("New seq of links:"); //DEBUG
-					System.out.println(Arrays.toString(LongUtils.toArray(_netPlan.getRouteSequenceOfLinks(wdmLayerId, lpRouteId)))); //DEBUG
-					break;
+					wavelengths = WDMUtils.WA_firstFit(cp, _wavelengthFiberOccupancy);
+					if(wavelengths.length > 0)
+					{
+						WDMUtils.allocateResources(cp, wavelengths, _wavelengthFiberOccupancy, null, null);
+						lpRoute.setSeqLinksAndProtectionSegments(cp);
+						WDMUtils.setLightpathSeqWavelengths(lpRoute, wavelengths);
+						if(Constants.DEBUG) System.out.println("\t\tNew sequence of fibers and wavelengths found!");
+						break;
+					}
 				}
 
 				UpdateRequest updateRequest = new UpdateRequest();
@@ -372,24 +332,24 @@ public class BasicPCEPBGPLSSpeaker extends IPCEEntity
 				updateRequest.setSrp(srp);
 
 				LSP lsp = new LSP();
-				lsp.setLspId(Integer.parseInt(_netPlan.getRouteAttribute(wdmLayerId, lpRouteId, "lspId")));
-				lsp.setAFlag(chosenWavelengthId != - 1);
+				lsp.setLspId(Integer.parseInt(lpRoute.getAttribute(Constants.ATTRIBUTE_LSP_ID));
+				lsp.setAFlag(wavelengths.length > 0);
 				updateRequest.setLsp(lsp);
 
-				if(chosenWavelengthId != - 1)
+				if(wavelengths.length > 0)
 				{
 					Path path = new Path();
 					ExplicitRouteObject ero = new ExplicitRouteObject();
 					path.setEro(ero);
 
-					seqFibers = _netPlan.getRouteSequenceOfLinks(wdmLayerId, lpRouteId);
-					long lastFiberId = - 1;
-					for(long fiberId : seqFibers)
+					seqFibers = lpRoute.getSeqLinksRealPath();
+					Link lastLink = null;
+					for(Link link : seqFibers)
 					{
-						long originNodeId_thisFiber = _netPlan.getLinkOriginNode(wdmLayerId, fiberId);
+						long originNodeId_thisFiber = link.getOriginNode().getId();
 						UnnumberIfIDEROSubobject eroso = new UnnumberIfIDEROSubobject();
 						eroso.setRouterID(Utils.getNodeIPAddress(_netPlan, originNodeId_thisFiber));
-						eroso.setInterfaceID(Utils.getLinkSourceInterface(_netPlan, wdmLayerId, fiberId));
+						eroso.setInterfaceID(Utils.getLinkSourceInterface(_netPlan, link.getId());
 						eroso.setLoosehop(false);
 						ero.addEROSubobject(eroso);
 
@@ -398,17 +358,17 @@ public class BasicPCEPBGPLSSpeaker extends IPCEEntity
 						DWDMWavelengthLabel wavelengthLabel = new DWDMWavelengthLabel();
 						wavelengthLabel.setGrid(1);
 						wavelengthLabel.setChannelSpacing(2);
-						wavelengthLabel.setN(chosenWavelengthId);
+						wavelengthLabel.setN(wavelengths[0]);
 						wavelengthLabel.setIdentifier(0);
 						wavelengthLabel.encode();
 						genLabel.setLabel(wavelengthLabel.getBytes());
 
-						lastFiberId = fiberId;
+						lastLink = link;
 					}
 
 					UnnumberIfIDEROSubobject eroso = new UnnumberIfIDEROSubobject();
-					eroso.setRouterID(Utils.getLinkDestinationIPAddress(_netPlan, wdmLayerId, lastFiberId));
-					eroso.setInterfaceID(Utils.getLinkDestinationInterface(_netPlan, wdmLayerId, lastFiberId));
+					eroso.setRouterID(Utils.getLinkDestinationIPAddress(_netPlan, lastLink.getId()));
+					eroso.setInterfaceID(Utils.getLinkDestinationInterface(_netPlan, lastLink.getId()));
 					eroso.setLoosehop(false);
 					ero.addEROSubobject(eroso);
 
@@ -423,95 +383,79 @@ public class BasicPCEPBGPLSSpeaker extends IPCEEntity
 				PCEPUpdate updateMsg = new PCEPUpdate();
 				updateMsg.setUpdateRequestList(updateList);
 				updateMsg.encode();
-
 				outMsg.add(updateMsg);
 			}
 
 			return outMsg;
 		}catch(Throwable e)
 		{
-			e.printStackTrace();
+			if(Constants.DEBUG) e.printStackTrace();
 			throw new RuntimeException(e);
 		}
 	}
 
 	private List handleLinkUpdate(LinkNLRI linkNLRI, boolean isUp)
 	{
+		if(Constants.DEBUG) System.out.println("\tHandling Link Update");
 		List outMsg = new LinkedList();
 
 		Inet4Address sourceNodeIPAddress = linkNLRI.getIpv4InterfaceAddressTLV().getIpv4Address();
 		Inet4Address destinationNodeIPAddress = linkNLRI.getIpv4NeighborAddressTLV().getIpv4Address();
-		long originNodeId = _ipNodeIdMap.get(sourceNodeIPAddress);
-		long destinationNodeId = _ipNodeIdMap.get(destinationNodeIPAddress);
+		Node originNode = _netPlan.getNodeFromId(_ipNodeIdMap.get(sourceNodeIPAddress));
+		Node destinationNode = _netPlan.getNodeFromId(_ipNodeIdMap.get(destinationNodeIPAddress));
 
-		Set<Long> possibleLinkIds = _netPlan.getNodePairLinks(originNodeId, destinationNodeId);
-		String sourceNodeType = _netPlan.getNodeAttribute(originNodeId, "type");
-		String destinationNodeType = _netPlan.getNodeAttribute(destinationNodeId, "type");
+		Set<Link> possibleLinks;
 
-		if(sourceNodeType.equals(destinationNodeType))
+		String sourceNodeType = originNode.getAttribute(Constants.ATTRIBUTE_NODE_TYPE);
+		String destinationNodeType = destinationNode.getAttribute(Constants.ATTRIBUTE_NODE_TYPE);
+
+		if(sourceNodeType.equals(destinationNodeType)) //Both are ROADM (both router shouldn't be connected!
 		{
+			possibleLinks = _netPlan.getNodePairLinks(originNode, destinationNode, false, _wdmLayer); //Links are in the bottom layer
+
+			if(Constants.DEBUG) System.out.println("\tBoth ends nodes are SAME type");
+
 			long srcIf = linkNLRI.getLinkIdentifiersTLV().getLinkLocalIdentifier();
 			long dstIf = linkNLRI.getLinkIdentifiersTLV().getLinkRemoteIdentifier();
 
-			for(long linkId : possibleLinkIds)
+			for(Link link : possibleLinks)
 			{
+				long linkId = link.getId();
+				if(Constants.DEBUG) System.out.println("\tExisting link");
 				long srcIf_thisLink = Utils.getLinkSourceInterface(_netPlan, linkId);
-				long dstIf_thisLink = Utils.getLinkSourceInterface(_netPlan, linkId);
+				long dstIf_thisLink = Utils.getLinkDestinationInterface(_netPlan, linkId);
 
-				if(! isUp)
+				if(srcIf == srcIf_thisLink && dstIf == dstIf_thisLink) //FIXME may be fixed! changed getLinkSource to getLinkDestination... reamins to be tested
 				{
-					System.out.println("srcIf = " + srcIf);
-					System.out.println("srcIf_thisLink =" + srcIf_thisLink);
-					System.out.println("dstIf = " + dstIf);
-					System.out.println("dstIf_thisLink = " + dstIf_thisLink);
-				}
-
-				//if(srcIf == srcIf_thisLink && dstIf == dstIf_thisLink) FIXME whyyy?
-				if(true)
-				{
-					//					if (_netPlan.isLinkDown(wdmLayerId, linkId)) _netPlan.setLinkUp(wdmLayerId, linkId);
-					//					else _netPlan.setLinkDown(wdmLayerId, linkId);
-
-					//					if (isUp && _netPlan.isLinkDown(wdmLayerId, linkId)) _netPlan.setLinkUp(wdmLayerId, linkId);
-					//					else _netPlan.setLinkDown(wdmLayerId, linkId); //Deprecated!
-
-					if(isUp && _netPlan.isLinkDown(wdmLayerId, linkId))
-					{
-						_netPlan.setLinkUp(wdmLayerId, linkId);
-						System.out.println("Link " + linkId + "set as DOWN"); //DEBUG
-					} else _netPlan.setLinkDown(wdmLayerId, linkId);
-
-					updateFiberTopology();
-					outMsg.addAll(handleFailureReparationEvent());
-
-					return outMsg;
+					link.setFailureState(isUp);
+					if(Constants.DEBUG) System.out.println("\tLink in WDM layer " + link.getIndex() + " set to: " + isUp);
 				}
 			}
-
-			long linkId = _netPlan.addLink(wdmLayerId, originNodeId, destinationNodeId, 40, 0, null);
-			_netPlan.setLinkAttribute(wdmLayerId, linkId, "srcIf", Long.toString(srcIf));
-			_netPlan.setLinkAttribute(wdmLayerId, linkId, "dstIf", Long.toString(dstIf));
-
-			//			if(isUp && _netPlan.isLinkDown(wdmLayerId, linkId)) _netPlan.setLinkUp(wdmLayerId, linkId);
-			//			else _netPlan.setLinkDown(wdmLayerId, linkId);
-
-			fiberTopology.addEdge(linkId, originNodeId, destinationNodeId);
-			updateFiberTopology();
-		} else
-		{
-			if(possibleLinkIds.isEmpty())
+			if(! possibleLinks.isEmpty())
 			{
-				long linkId = _netPlan.addLink(ipLayerId, originNodeId, destinationNodeId, Double.MAX_VALUE, 0, null);
-				if(! isUp) _netPlan.setLinkDown(ipLayerId, linkId);
+				outMsg.addAll(handleFailureReparationEvent());
+				return outMsg;
+			}
+			if(Constants.DEBUG) System.out.println("\tNo previous link, creating one");
+			Link newLink = _netPlan.addLink(originNode, destinationNode, Constants.W, 0, - 1, null, null, _wdmLayer);
+			newLink.setAttribute(Constants.ATTRIBUTE_SOURCE_INTERFACE, Long.toString(srcIf));
+			newLink.setAttribute(Constants.ATTRIBUTE_DESTINATION_INTERFACE, Long.toString(dstIf));
+			newLink.setFailureState(isUp);
+
+		} else //Both Nodes are different type: one ROADM and one ROUTER
+		{
+			possibleLinks = _netPlan.getNodePairLinks(originNode, destinationNode, false, _ipLayer);
+
+			if(Constants.DEBUG) System.out.println("\tBoth ends nodes are DIFFERENT type");
+			if(possibleLinks.isEmpty())
+			{
+				if(Constants.DEBUG) System.out.println("\t No previous link, creating one");
+				Link newLink = _netPlan.addLink(originNode, destinationNode, Double.MAX_EXPONENT, 0, - 1, null, _ipLayer);
+				newLink.setFailureState(isUp);
 			} else
 			{
-				long linkId = possibleLinkIds.iterator().next();
-
-				if(_netPlan.isLinkDown(ipLayerId, linkId)) _netPlan.setLinkUp(ipLayerId, linkId);
-				else _netPlan.setLinkDown(ipLayerId, linkId);
-
-				//				if (isUp && _netPlan.isLinkDown(ipLayerId, linkId)) _netPlan.setLinkUp(ipLayerId, linkId);
-				//				else _netPlan.setLinkDown(ipLayerId, linkId);
+				Link link = possibleLinks.iterator().next();  //Assuming only one link (in each direction) between ROADM and ROUTER
+				link.setFailureState(isUp);
 			}
 		}
 
@@ -529,9 +473,8 @@ public class BasicPCEPBGPLSSpeaker extends IPCEEntity
 		{
 			long nodeId = _ipNodeIdMap.get(ipAddress);
 			Node node = _netPlan.getNodeFromId(nodeId);
-
+			if(Constants.DEBUG) System.out.println("\tSetting node " + node.getIndex() + " as : " + isUp);
 			node.setFailureState(isUp);
-
 			outMsg.addAll(handleFailureReparationEvent());
 		} else
 		{
@@ -582,9 +525,9 @@ public class BasicPCEPBGPLSSpeaker extends IPCEEntity
 
 				if(Constants.DEBUG)
 				{
-					System.out.println("\tIP Ingress Node = "+ingressNode);
-					System.out.println("\tIP Egress Node = "+egressNode);
-					System.out.println("\tIP Demand index = "+ipDemand.getIndex());
+					System.out.println("\tIP Ingress Node = " + ingressNode);
+					System.out.println("\tIP Egress Node = " + egressNode);
+					System.out.println("\tIP Demand index = " + ipDemand.getIndex());
 				}
 				
 				/* First, try to allocate over a single path over the available resources at the IP layer */
@@ -596,7 +539,7 @@ public class BasicPCEPBGPLSSpeaker extends IPCEEntity
 					if(Constants.DEBUG) System.out.println("\tAllocating IP demand through the upper layer");
 					//Add a route in the IP layer
 					Route ipRoute = _netPlan.addRoute(ipDemand, bandwidthInGbps, bandwidthInGbps, seqLinks, null);
-					if(Constants.DEBUG) System.out.println("\tAdded Route in IP layer. Index = "+ipRoute.getIndex()+", CarriedTraffic = "+ipRoute.getCarriedTraffic());
+					if(Constants.DEBUG) System.out.println("\tAdded Route in IP layer. Index = " + ipRoute.getIndex() + ", CarriedTraffic = " + ipRoute.getCarriedTraffic());
 					Pair<Path, Bandwidth> aux = generateSingleLayerPath(ipRoute);
 					Path path = aux.getFirst();
 					Bandwidth bw1 = aux.getSecond();
@@ -611,9 +554,10 @@ public class BasicPCEPBGPLSSpeaker extends IPCEEntity
 				}
 
 				if(allocatedConnection) continue;
+				if(Constants.DEBUG) System.out.println("\tAding lightpath + MPLS route");
 
-				long ingressNodeId_roadm = _netPlan.getNodeOutNeighbors(ipLayerId, ingressNodeId).iterator().next();
-				long egressNodeId_roadm = _netPlan.getNodeInNeighbors(ipLayerId, egressNodeId).iterator().next();
+				Node ingressNode_roadm = ingressNode.getOutNeighbors(_ipLayer).iterator().next();
+				Node egressNode_roadm = egressNode.getInNeighbors(_ipLayer).iterator().next();
 
 				int allowedBifurcationDegree = 1;
 				float minBandwidthPerPathInGbps = bandwidthInGbps;
@@ -626,25 +570,59 @@ public class BasicPCEPBGPLSSpeaker extends IPCEEntity
 				}
 
 				int numLps = (int) Math.ceil(bandwidthInGbps / Constants.LIGHTPATH_BINARY_RATE_GBPS);
+				if(Constants.DEBUG)
+				{
+					System.out.println("\tBandwidth needed = " + bandwidthInGbps);
+					System.out.println("\tNumber of lightpaths needed = " + numLps);
+					System.out.println("\tAllowed bifurcation = " + allowedBifurcationDegree);
+					System.out.println("\tMax bandwidth per lightpath = " + minBandwidthPerPathInGbps);
+				}
 
 				if(numLps <= allowedBifurcationDegree && bandwidthInGbps / numLps >= minBandwidthPerPathInGbps)
 				{
-					Set<Long> addedLightpaths = new LinkedHashSet<Long>();
+					if(Constants.DEBUG) System.out.println("\tBalancing constrains are met, adding ligthpaths...");
+					Set<Pair<Route,Route>> addedLightpaths = new LinkedHashSet<>();
 
 					for(int lp = 0; lp < numLps; lp++)
 					{
-						long lightpathId = addLightpath(_netPlan, ingressNodeId_roadm, egressNodeId_roadm);
-						if(lightpathId == - 1) break;
+						List<Node> nodesUp = new LinkedList<>(_netPlan.getNodesUp());
+						List<Link> linksUp = new LinkedList<>(_netPlan.getLinksUp(_wdmLayer));
 
-						addedLightpaths.add(lightpathId);
+						List<List<Link>> cpl = GraphUtils.getKLooplessShortestPaths(nodesUp, linksUp, ingressNode_roadm, egressNode_roadm, null, 5, - 1, - 1, - 1, - 1, - 1, - 1);
+						for(List<Link> cp : cpl)
+						{
+							int[] wavelengths = WDMUtils.WA_firstFit(cp, _wavelengthFiberOccupancy);
+							if(wavelengths.length > 0)
+							{
+								/* Add lightpath */
+								WDMUtils.allocateResources(cp, wavelengths, _wavelengthFiberOccupancy, null, null);
+								Demand wdmDemand = _netPlan.addDemand(ingressNode_roadm, egressNode_roadm, Constants.LIGHTPATH_BINARY_RATE_GBPS, null, _wdmLayer);
+								Route lpRoute = WDMUtils.addLightpathAndUpdateOccupancy(wdmDemand, cp, Constants.LIGHTPATH_BINARY_RATE_GBPS, wavelengths, _wavelengthFiberOccupancy);
+								Link ipLink = _netPlan.addLink(ingressNode_roadm, egressNode_roadm, Constants.LIGHTPATH_BINARY_RATE_GBPS, 0, Double.MAX_VALUE, null, _ipLayer);
+								ipLink.coupleToLowerLayerDemand(wdmDemand);
+
+								/* Add IP route */
+								Demand ipDemand2 = _netPlan.addDemand(ingressNode, egressNode, bandwidthInGbps / numLps, null, _ipLayer);
+								List<Link> ipPath = new LinkedList<>();
+								Link originLink = _netPlan.getNodePairLinks(ingressNode, ingressNode_roadm, false, _ipLayer).iterator().next();
+								Link destinationLink = _netPlan.getNodePairLinks(egressNode_roadm, egressNode, false, _ipLayer).iterator().next();
+								ipPath.add(originLink);
+								ipPath.add(ipLink);
+								ipPath.add(destinationLink);
+								Route ipRoute = _netPlan.addRoute(ipDemand2,bandwidthInGbps/numLps,bandwidthInGbps/numLps,ipPath,null);
+
+								addedLightpaths.add(Pair.of(lpRoute,ipRoute));
+								break;
+							}
+						}
 					}
 
 					if(addedLightpaths.size() == numLps)
 					{
-						long originLinkId = _netPlan.getNodePairLinks(ipLayerId, ingressNodeId, ingressNodeId_roadm).iterator().next();
-						long destinationLinkId = _netPlan.getNodePairLinks(ipLayerId, egressNodeId_roadm, egressNodeId).iterator().next();
+						long originLinkId = _netPlan.getNodePairLinks(ipLayerId, ingressNodeId, ingressNode_roadm).iterator().next();
+						long destinationLinkId = _netPlan.getNodePairLinks(ipLayerId, egressNode_roadm, egressNodeId).iterator().next();
 
-						for(long lightpathId : addedLightpaths)
+						for(Pair<Route,Route> p : addedLightpaths)
 						{
 							Pair<Path, Bandwidth> aux = generateMultiLayerPath(_netPlan, originLinkId, lightpathId, destinationLinkId, bandwidthInGbps / numLps);
 							Path path = aux.getFirst();
@@ -660,8 +638,8 @@ public class BasicPCEPBGPLSSpeaker extends IPCEEntity
 						allocatedConnection = true;
 					} else
 					{
-						for(long lightpathId : addedLightpaths)
-							removeLightpath(lightpathId);
+						for(Pair<Route,Route> p : addedLightpaths)
+							removeLightpath(p);
 					}
 				}
 
@@ -688,14 +666,18 @@ public class BasicPCEPBGPLSSpeaker extends IPCEEntity
 		}
 	}
 
-	private void removeLightpath(long lightpathId)
+	private void removeLightpath(Pair<Route,Route> p)
 	{
-		long lpRouteId = _netPlan.getDemandRoutes(wdmLayerId, _netPlan.getLinkCoupledLowerLayerDemand(ipLayerId, lightpathId).getSecond()).iterator().next();
-		List<Long> seqFibers = _netPlan.getRouteSequenceOfLinks(wdmLayerId, lpRouteId);
-		int[] seqWavelengths = WDMUtils.getLightpathSeqWavelengths(_netPlan, wdmLayerId, lpRouteId);
+		Route lp = p.getFirst();
+		Route ip = p.getSecond();
 
-		WDMUtils.releaseResources(seqFibers, seqWavelengths, wavelengthFiberOccupancy);
-		_netPlan.removeLink(ipLayerId, lightpathId);
+		/* Remove lightpath */
+		Link ipLink = lp.getDemand().getCoupledLink();
+		WDMUtils.removeLightpathAndUpdateOccupancy(lp,_wavelengthFiberOccupancy,true);
+
+		/* Remove IP demand and route */
+		ip.getDemand().remove();
+		ipLink.remove();
 	}
 
 }
