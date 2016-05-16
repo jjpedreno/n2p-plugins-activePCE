@@ -1,16 +1,28 @@
+/*
+ *  Copyright (c) 2016 Jose-Juan Pedreno-Manresa, Jose-Luis Izquierdo-Zaragoza, Pablo Pavon-Marino
+ *  All rights reserved. This program and the accompanying materials
+ *  are made available under the terms of the GNU Lesser Public License v3
+ *  which accompanies this distribution, and is available at
+ *  http://www.gnu.org/licenses/lgpl.html
+ *
+ *  Contributors:
+ *          Jose-Juan Pedreno-Manresa
+ *          Jose-Luis Izquierdo-Zaragoza
+ */
+
 package es.upct.girtel.net2plan.plugins.activepce.pcc;
 
 import com.net2plan.gui.GUINet2Plan;
 import com.net2plan.gui.tools.IGUINetworkViewer;
 import com.net2plan.gui.utils.*;
-import com.net2plan.interfaces.networkDesign.Net2PlanException;
-import com.net2plan.interfaces.networkDesign.NetPlan;
+import com.net2plan.interfaces.networkDesign.*;
 import com.net2plan.internal.Constants;
 import com.net2plan.internal.ErrorHandling;
 import com.net2plan.internal.plugins.IGUIModule;
 import com.net2plan.internal.plugins.PluginSystem;
 import com.net2plan.libraries.WDMUtils;
 import com.net2plan.utils.IntUtils;
+import com.net2plan.utils.Pair;
 import com.net2plan.utils.StringUtils;
 import com.net2plan.utils.Triple;
 import es.tid.bgp.bgp4.messages.*;
@@ -38,7 +50,6 @@ import es.tid.rsvp.objects.subobjects.EROSubobject;
 import es.tid.rsvp.objects.subobjects.GeneralizedLabelEROSubobject;
 import es.tid.rsvp.objects.subobjects.IPv4prefixEROSubobject;
 import es.tid.rsvp.objects.subobjects.UnnumberIfIDEROSubobject;
-import es.upct.girtel.net2plan.plugins.activepce.utils.LoadBalancing_UPCT;
 import es.upct.girtel.net2plan.plugins.activepce.utils.Utils;
 import net.miginfocom.swing.MigLayout;
 
@@ -56,29 +67,28 @@ import java.io.OutputStream;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.Socket;
+import java.net.UnknownHostException;
 import java.util.*;
 import java.util.List;
-import java.util.Map.Entry;
 
-/**
- *
- * @author Jose Luis
- */
+import static es.upct.girtel.net2plan.plugins.activepce.utils.Utils.getLinkSourceInterface;
+
 public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListener, ItemListener
 {
 	private final static String NEW_LINE = StringUtils.getLineSeparator();
-	private final static String title = "Network Emulator and PCEP/BGP-LS Client";
-	private JTextArea log;
-	private JButton clearButton;
-	private JTextField txt_ip, txt_bandwidth, txt_maxBifurcation, txt_minBandwidthPerPath;
-	private JComboBox sourceNode, destinationNode, fiberFailureSelector;
-	private JButton gotoServicesButton, makePCERequest, connectToPCE, disconnectFromPCE, failFiber, viewFiber;
-	private JCheckBox loadBalancingEnabled;
-	private JPanel loadBalancingPanel;
-	private Thread pcepThread, bgplsThread;
-	private Socket pcepSocket, bgplsSocket;
-	private Map<Long, Set<Long>> routeOriginalLinks;
-	
+	private final static String title    = "Network Emulator and PCEP/BGP-LS Client";
+	private JTextArea  log;
+	private JButton    _clearButton;
+	private JTextField _txt_ip, _txt_bandwidth, _txt_maxBifurcation, _txt_minBandwidthPerPath;
+	private JComboBox _sourceNode, _destinationNode, _fiberFailureSelector;
+	private JButton _buttonGotoServices, _buttonMakePCERequest, _buttonConnectToPCE, _buttonDisconnectFromPCE, _buttonFailFiber, _buttonViewFiber;
+	private JCheckBox _loadBalancingEnabled;
+	private JPanel    _loadBalancingPanel;
+	private Thread    _pcepThread, _bgplsThread;
+	private Socket _pcepSocket, _bgplsSocket;
+	private NetworkLayer _wdmLayer, _ipLayer;
+	private Map<Long, Set<Long>> _routeOriginalLinks;
+
 	public static void main(String[] args)
 	{
 		GUINet2Plan.main(args);
@@ -86,7 +96,7 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 		PluginSystem.loadExternalPlugins();
 		GUINet2Plan.refreshMenu();
 	}
-	
+
 	public NetworkEmulatorPCC()
 	{
 		super(title.toUpperCase(Locale.getDefault()));
@@ -96,112 +106,108 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 	public void actionPerformed(ActionEvent e)
 	{
 		Object src = e.getSource();
-		if (src == clearButton)
+		if(src == _clearButton)
 		{
 			log.setText("");
-		}
-		else if (src == gotoServicesButton)
+		} else if(src == _buttonGotoServices)
 		{
 			selectNetPlanViewItem(Constants.NetworkElementType.DEMAND, null);
-		}
-		else if (src == makePCERequest)
+		} else if(src == _buttonMakePCERequest)
 		{
 			performPCERequest();
-		}
-		else if (src == connectToPCE)
+		} else if(src == _buttonConnectToPCE)
 		{
 			connect();
-		}
-		else if (src == disconnectFromPCE)
+		} else if(src == _buttonDisconnectFromPCE)
 		{
 			shutdown();
 		}
 	}
-	
+
 	@Override
 	public void configure(JPanel contentPane)
 	{
-		routeOriginalLinks = new HashMap<>();
+		_routeOriginalLinks = new HashMap<>();
 
-		txt_ip = new JTextField(getCurrentOptions().get("pce.defaultIP"));
+		_txt_ip = new JTextField(getCurrentOptions().get("pce.defaultIP"));
 
-		sourceNode = new WiderJComboBox();
-		destinationNode = new WiderJComboBox();
-		txt_bandwidth = new JTextField();
-		loadBalancingEnabled = new JCheckBox("Load-balancing");
-		loadBalancingEnabled.addItemListener(this);
-		loadBalancingPanel = new JPanel(new MigLayout("", "[][grow]", "[][]"));
-		gotoServicesButton = new JButton("Go to existing services");
-		txt_maxBifurcation = new JTextField();
-		txt_minBandwidthPerPath = new JTextField();
-		makePCERequest = new JButton("Make request");
-		connectToPCE = new JButton("Connect");
-		connectToPCE.setBackground(Color.RED);
-		connectToPCE.setContentAreaFilled(false);
-		connectToPCE.setOpaque(true);
-		disconnectFromPCE = new JButton("Disconnect");
-		disconnectFromPCE.setEnabled(false);
-		failFiber = new JButton("Simulate failure");
-		viewFiber = new JButton("View fiber"); viewFiber.setEnabled(false);
-		
+		_sourceNode = new WiderJComboBox();
+		_destinationNode = new WiderJComboBox();
+		_txt_bandwidth = new JTextField();
+		_loadBalancingEnabled = new JCheckBox("Load-balancing");
+		_loadBalancingEnabled.addItemListener(this);
+		_loadBalancingPanel = new JPanel(new MigLayout("", "[][grow]", "[][]"));
+		_buttonGotoServices = new JButton("Go to existing services");
+		_txt_maxBifurcation = new JTextField();
+		_txt_minBandwidthPerPath = new JTextField();
+		_buttonMakePCERequest = new JButton("Make request");
+		_buttonConnectToPCE = new JButton("Connect");
+		_buttonConnectToPCE.setBackground(Color.RED);
+		_buttonConnectToPCE.setContentAreaFilled(false);
+		_buttonConnectToPCE.setOpaque(true);
+		_buttonDisconnectFromPCE = new JButton("Disconnect");
+		_buttonDisconnectFromPCE.setEnabled(false);
+		_buttonFailFiber = new JButton("Simulate failure");
+		_buttonViewFiber = new JButton("View fiber"); _buttonViewFiber.setEnabled(false);
+
 		super.configure(contentPane);
 
 		JPanel controllerTab = new JPanel();
 		controllerTab.setLayout(new MigLayout("fill, insets 0 0 0 0", "[grow]", "[][][grow]"));
 		controllerTab.setBorder(new LineBorder(Color.BLACK));
-		
+
 		JPanel connectionHandler = new JPanel(new MigLayout("insets 0 0 0 0", "[][grow]", "[][]"));
 		connectionHandler.setBorder(BorderFactory.createTitledBorder(new LineBorder(Color.BLACK), "PCE connection controller"));
 		connectionHandler.add(new JLabel("PCE IP"));
-		connectionHandler.add(txt_ip, "growx, wrap");
-		
+		connectionHandler.add(_txt_ip, "growx, wrap");
+
 		JPanel connectionHandlerButton = new JPanel(new FlowLayout());
-		connectionHandlerButton.add(connectToPCE);
-		connectionHandlerButton.add(disconnectFromPCE);
+		connectionHandlerButton.add(_buttonConnectToPCE);
+		connectionHandlerButton.add(_buttonDisconnectFromPCE);
 		connectionHandler.add(connectionHandlerButton, "center, spanx 2, wrap");
-		connectToPCE.addActionListener(this);
-		disconnectFromPCE.addActionListener(this);
-		
+		_buttonConnectToPCE.addActionListener(this);
+		_buttonDisconnectFromPCE.addActionListener(this);
+
 		JPanel serviceProvisioning = new JPanel();
 		serviceProvisioning.setLayout(new MigLayout("insets 0 0 0 0", "[][grow]", "[][][][][grow]"));
 		serviceProvisioning.setBorder(BorderFactory.createTitledBorder(new LineBorder(Color.BLACK), "Service provisioning"));
-		
+
 		serviceProvisioning.add(new JLabel("Source node"));
-		serviceProvisioning.add(sourceNode, "growx, wrap");
+		serviceProvisioning.add(_sourceNode, "growx, wrap");
 		serviceProvisioning.add(new JLabel("Destination node"));
-		serviceProvisioning.add(destinationNode, "growx, wrap");
+		serviceProvisioning.add(_destinationNode, "growx, wrap");
 		serviceProvisioning.add(new JLabel("Requested bandwidth"));
-		serviceProvisioning.add(txt_bandwidth, "growx, wrap");
+		serviceProvisioning.add(_txt_bandwidth, "growx, wrap");
 		serviceProvisioning.add(new JLabel("Additional constraints"), "top");
-		
+
 		JPanel additionalConstraints = new JPanel(new MigLayout("fill, insets 0 0 0 0", "[grow]", "[][]"));
-		
-		loadBalancingPanel.add(new JLabel("Maximum number of paths"));
-		loadBalancingPanel.add(txt_maxBifurcation, "growx, wrap");
-		loadBalancingPanel.add(new JLabel("Minimum bandwidth per path"));
-		loadBalancingPanel.add(txt_minBandwidthPerPath, "growx, wrap");
-		
-		additionalConstraints.add(loadBalancingEnabled, "growx, wrap");
-		additionalConstraints.add(loadBalancingPanel, "growx, wrap");
+
+		_loadBalancingPanel.add(new JLabel("Maximum number of paths"));
+		_loadBalancingPanel.add(_txt_maxBifurcation, "growx, wrap");
+		_loadBalancingPanel.add(new JLabel("Minimum bandwidth per path"));
+		_loadBalancingPanel.add(_txt_minBandwidthPerPath, "growx, wrap");
+
+		additionalConstraints.add(_loadBalancingEnabled, "growx, wrap");
+		additionalConstraints.add(_loadBalancingPanel, "growx, wrap");
 		serviceProvisioning.add(additionalConstraints, "growx, wrap");
-		serviceProvisioning.add(makePCERequest, "center, spanx 2, wrap");
-		makePCERequest.addActionListener(this);
-		
-		gotoServicesButton.addActionListener(this);
-		serviceProvisioning.add(gotoServicesButton, "dock south");
-		
+		serviceProvisioning.add(_buttonMakePCERequest, "center, spanx 2, wrap");
+		_buttonMakePCERequest.addActionListener(this);
+
+		_buttonGotoServices.addActionListener(this);
+		serviceProvisioning.add(_buttonGotoServices, "dock south");
+
 		JPanel failureReparationSimulator = new JPanel();
-		fiberFailureSelector = new WiderJComboBox();
+		_fiberFailureSelector = new WiderJComboBox();
 		failureReparationSimulator.setLayout(new MigLayout("insets 0 0 0 0", "[][grow]", "[][grow]"));
 		failureReparationSimulator.setBorder(BorderFactory.createTitledBorder(new LineBorder(Color.BLACK), "Fiber failure/reparation simulator"));
 		failureReparationSimulator.add(new JLabel("Select fiber to fail"));
-		failureReparationSimulator.add(fiberFailureSelector, "growx, wrap");
-		
+		failureReparationSimulator.add(_fiberFailureSelector, "growx, wrap");
+
 		JPanel failureSimulatorButtonPanel = new JPanel(new FlowLayout());
-		failureSimulatorButtonPanel.add(failFiber);
+		failureSimulatorButtonPanel.add(_buttonFailFiber);
 		failureReparationSimulator.add(failureSimulatorButtonPanel, "center, spanx 2, wrap");
-		
-		final DefaultTableModel model = new ClassAwareTableModel(new Object[1][6], new String[] { "Id", "Origin node", "Destination node", "" })
+
+		final DefaultTableModel model = new ClassAwareTableModel(new Object[1][6], new String[]{"Id", "Origin node", "Destination node", ""})
 		{
 			@Override
 			public boolean isCellEditable(int rowIndex, int columnIndex)
@@ -209,50 +215,48 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 				return columnIndex == 3;
 			}
 		};
-		
+
 		final JTable table = new AdvancedJTable(model);
 		table.setEnabled(false);
-		
-		failFiber.addActionListener(new ActionListener()
+
+		_buttonFailFiber.addActionListener(new ActionListener()
 		{
 			@Override
 			public void actionPerformed(ActionEvent e)
 			{
-				long linkId = (Long) ((StringLabeller) fiberFailureSelector.getSelectedItem()).getObject();
+				int linkIndex = (int) ((StringLabeller) _fiberFailureSelector.getSelectedItem()).getObject();
 				NetPlan netPlan = getDesign();
 
-				netPlan.setLinkDown(0, linkId);
-				if (netPlan.getLayerDefaultId() == 0) getTopologyPanel().getCanvas().setLinkDown(linkId);
+				Link link = netPlan.getLink(linkIndex, _wdmLayer);
+				link.setFailureState(false);
+				if(netPlan.getNetworkLayerDefault().getIndex() == 0) getTopologyPanel().getCanvas().showLink(link, Color.RED, false);
 
 				updateOperationLog("Simulating failure");
 
 				try
 				{
-					if (bgplsSocket == null) throw new Net2PlanException("PCC not connected to PCE");
-					BGP4Update updateMessage = createLinkMessage(netPlan, 0, linkId, false);
+					if(_bgplsSocket == null) throw new Net2PlanException("PCC not connected to PCE");
+					BGP4Update updateMessage = createLinkMessage(netPlan, netPlan.getLink(linkIndex, _wdmLayer).getId(), false);
 
-					OutputStream outBGP = bgplsSocket.getOutputStream();
+					OutputStream outBGP = _bgplsSocket.getOutputStream();
 					Utils.writeMessage(outBGP, updateMessage.getBytes());
-				}
-				catch (Throwable ex)
+				}catch(Throwable ex)
 				{
 					ErrorHandling.addErrorOrException(ex, NetworkEmulatorPCC.class);
 					ErrorHandling.showErrorDialog(ex.getMessage(), "Unable to simulate failure");
 					return;
 				}
 
+				if(_fiberFailureSelector.getItemCount() == 0) _buttonFailFiber.setVisible(false);
 
-
-				if (fiberFailureSelector.getItemCount() == 0) failFiber.setVisible(false);
-		
-				if (!table.isEnabled()) model.removeRow(0);
-				model.addRow(new Object[] { linkId, netPlan.getLinkOriginNode(0, linkId), netPlan.getLinkDestinationNode(0, linkId), "Repair" });
+				if(! table.isEnabled()) model.removeRow(0);
+				model.addRow(new Object[]{linkIndex, link.getOriginNode().getIndex(), link.getDestinationNode().getIndex(), "Repair"});
 
 				table.setEnabled(true);
 				updateNetPlanView();
 			}
 		});
-		
+
 		Action repair = new AbstractAction()
 		{
 			@Override
@@ -263,45 +267,45 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 					JTable table = (JTable) e.getSource();
 					int modelRow = Integer.parseInt(e.getActionCommand());
 
-					long linkId = (Long) table.getModel().getValueAt(modelRow, 0);
+					int linkIndex = (int) table.getModel().getValueAt(modelRow, 0);
 					NetPlan netPlan = getDesign();
-					
+
 					try
 					{
-						if (bgplsSocket == null) throw new Net2PlanException("PCC not connected to PCE");
-						BGP4Update updateMessage = createLinkMessage(netPlan, 0, linkId, true);
+						if(_bgplsSocket == null) throw new Net2PlanException("PCC not connected to PCE");
+						BGP4Update updateMessage = createLinkMessage(netPlan, netPlan.getLink(linkIndex, _wdmLayer).getId(), true);
 
-						OutputStream outBGP = bgplsSocket.getOutputStream();
+						OutputStream outBGP = _bgplsSocket.getOutputStream();
 						Utils.writeMessage(outBGP, updateMessage.getBytes());
-					}
-					catch (Throwable ex)
+					}catch(Throwable ex)
 					{
 						ErrorHandling.addErrorOrException(ex, NetworkEmulatorPCC.class);
 						ErrorHandling.showErrorDialog(ex.getMessage(), "Unable to simulate reparation");
 						return;
 					}
 
-					netPlan.setLinkUp(0, linkId);
-					if (netPlan.getLayerDefaultId() == 0) getTopologyPanel().getCanvas().setLinkUp(linkId);
-					
+					Link link = netPlan.getLink(linkIndex, _wdmLayer);
+					link.setFailureState(true);
+					if(netPlan.getNetworkLayerDefault().getIndex() == 0) getTopologyPanel().getCanvas().showLink(link, Color.BLACK, false);
+
 					updateNetPlanView();
 
-					long originNodeId = netPlan.getLinkOriginNode(linkId);
-					long destinationNodeId = netPlan.getLinkDestinationNode(linkId);
-					fiberFailureSelector.addItem(StringLabeller.unmodifiableOf(linkId, "e" + linkId + " [n" + originNodeId + " (" + netPlan.getNodeName(originNodeId) + ") -> n" + destinationNodeId + " (" + netPlan.getNodeName(destinationNodeId) + ")]"));
-					failFiber.setVisible(true);
-					
+					Node originNode = link.getOriginNode();
+					Node destinationNode = link.getDestinationNode();
+					_fiberFailureSelector.addItem(StringLabeller.unmodifiableOf(linkIndex, "e" + linkIndex + " [n" + originNode.getIndex() + " (" + originNode.getName() + ") -> n" + destinationNode
+							.getIndex() + " (" + destinationNode.getName() + ")]"));
+					_buttonFailFiber.setVisible(true);
+
 					((DefaultTableModel) table.getModel()).removeRow(modelRow);
 
 					table.setEnabled(true);
 
-					if (table.getModel().getRowCount() == 0)
+					if(table.getModel().getRowCount() == 0)
 					{
 						((DefaultTableModel) table.getModel()).addRow(new Object[6]);
 						table.setEnabled(false);
 					}
-				}
-				catch (Throwable e1)
+				}catch(Throwable e1)
 				{
 					throw new RuntimeException(e1);
 				}
@@ -322,36 +326,36 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 		controllerTab.add(connectionHandler, "growx, wrap");
 		controllerTab.add(serviceProvisioning, "growx, wrap");
 		controllerTab.add(failureReparationSimulator, "grow, wrap");
-		
+
 		JPanel eventGenerator = new JPanel(new MigLayout("insets 0 0 0 0", "[][grow]", "[]"));
 		controllerTab.add(eventGenerator, "grow, wrap");
-		
+
 		addTab("Emulator controller", controllerTab, 2);
 	}
-	
+
 	@Override
 	public JPanel configureLeftBottomPanel()
 	{
-		clearButton = new JButton("Clear");
-		clearButton.addActionListener(this);
+		_clearButton = new JButton("Clear");
+		_clearButton.addActionListener(this);
 		JToolBar toolbar = new JToolBar();
-		toolbar.add(clearButton);
+		toolbar.add(_clearButton);
 		toolbar.setFloatable(false);
 		toolbar.setRollover(true);
-		
+
 		log = new JTextArea();
 		log.setFont(new JLabel().getFont());
 		DefaultCaret caret = (DefaultCaret) log.getCaret();
-		caret.setUpdatePolicy(DefaultCaret.NEVER_UPDATE);
+		caret.setUpdatePolicy(DefaultCaret.ALWAYS_UPDATE);
 
 		JPanel leftBottomPanel = new JPanel(new MigLayout("fill, insets 0 0 0 0"));
 		leftBottomPanel.setBorder(BorderFactory.createTitledBorder(new LineBorder(Color.BLACK), "Operation log"));
 		leftBottomPanel.add(toolbar, "dock north");
 		leftBottomPanel.add(new JScrollPane(log), "grow");
-		
+
 		return leftBottomPanel;
 	}
-	
+
 	@Override
 	public String getDescription()
 	{
@@ -375,13 +379,16 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 	{
 		return title;
 	}
-	
+
 	@Override
 	public List<Triple<String, String, String>> getParameters()
 	{
-		List<Triple<String, String, String>> parameters = new LinkedList<Triple<String, String, String>>();
-		parameters.add(Triple.of("pce.defaultIP", "192.168.56.101", "Default IP address of the machine where PCE is running"));
-		
+
+		List<Triple<String, String, String>> parameters = new LinkedList<>();
+		String ip = "127.0.0.1";
+		//try{ip = Inet4Address.getLocalHost().getHostAddress();}catch(Throwable e){ ip = "127.0.0.1";}
+		parameters.add(Triple.of("pce.defaultIP", ip, "Default IP address of the machine where PCE is running"));
+
 		return parameters;
 	}
 
@@ -389,57 +396,66 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 	public void itemStateChanged(ItemEvent e)
 	{
 		Object src = e.getSource();
-		if (src == loadBalancingEnabled)
-			SwingUtils.setEnabled(loadBalancingPanel, ((JCheckBox) loadBalancingEnabled).isSelected());
+		if(src == _loadBalancingEnabled)
+			SwingUtils.setEnabled(_loadBalancingPanel, ((JCheckBox) _loadBalancingEnabled).isSelected());
 	}
-	
+
 	@Override
 	public void loadDesign(NetPlan netPlan)
 	{
 		super.loadDesign(netPlan);
-		
-		if (!netPlan.isEmpty())
+
+		if(netPlan.hasNodes() && netPlan.getNumberOfLayers() == 2)
 		{
 			updateOperationLog("Design loaded");
-			
-			Map<Long, String> nodeIPAddress = netPlan.getNodesAttributeMap("ipAddress");
-			sourceNode.removeAllItems();
-			destinationNode.removeAllItems();
+			if(netPlan.getNetworkLayers().size() != 2) throw new Net2PlanException("Design should have 2 layers");
 
-			for(Entry<Long, String> entry : nodeIPAddress.entrySet())
+			_wdmLayer = netPlan.getNetworkLayer(0);
+			_ipLayer = netPlan.getNetworkLayer(1);
+
+			List<Node> nodes = netPlan.getNodes();
+			_sourceNode.removeAllItems();
+			_destinationNode.removeAllItems();
+
+			WDMUtils.setFibersNumWavelengths(netPlan, es.upct.girtel.net2plan.plugins.activepce.utils.Constants.W, _wdmLayer);
+
+			for(Node node : nodes)
 			{
-				if (netPlan.getNodeAttribute(entry.getKey(), "type").equals("roadm")) continue;
+				String ipAddress = Utils.getNodeIPAddress(netPlan, node.getId()).getHostAddress(); //FIXME may throw NullPointerException (also several methods below)
+				if(ipAddress != null && node.getAttribute(es.upct.girtel.net2plan.plugins.activepce.utils.Constants.ATTRIBUTE_NODE_TYPE).equals(es.upct.girtel.net2plan.plugins.activepce.utils
+						.Constants.NODE_TYPE_ROADM)) continue;
 
-				sourceNode.addItem(StringLabeller.unmodifiableOf(entry.getKey(), entry.getValue() + " [n" + entry.getKey() + ", " + netPlan.getNodeName(entry.getKey()) + "]"));
-				destinationNode.addItem(StringLabeller.unmodifiableOf(entry.getKey(), entry.getValue() + " [n" + entry.getKey() + ", " + netPlan.getNodeName(entry.getKey()) + "]"));
+				_sourceNode.addItem(StringLabeller.unmodifiableOf(node.getIndex(), ipAddress + " [n" + node.getIndex() + ", " + node.getName() + "]"));
+				_destinationNode.addItem(StringLabeller.unmodifiableOf(node.getIndex(), ipAddress + " [n" + node.getIndex() + ", " + node.getName() + "]"));
 			}
 
-			fiberFailureSelector.removeAllItems();
-			for(long linkId : netPlan.getLinkIds())
+			_fiberFailureSelector.removeAllItems();
+			for(Link link : netPlan.getLinks(_wdmLayer))
 			{
-				long originNodeId = netPlan.getLinkOriginNode(linkId);
-				long destinationNodeId = netPlan.getLinkDestinationNode(linkId);
+				Node originNode = link.getOriginNode();
+				Node destinationNode = link.getDestinationNode();
 
-				String sourceNodeType = netPlan.getNodeAttribute(originNodeId, "type");
-				String destinationNodeType = netPlan.getNodeAttribute(destinationNodeId, "type");
+				String sourceNodeType = originNode.getAttribute(es.upct.girtel.net2plan.plugins.activepce.utils.Constants.ATTRIBUTE_NODE_TYPE);
+				String destinationNodeType = destinationNode.getAttribute(es.upct.girtel.net2plan.plugins.activepce.utils.Constants.ATTRIBUTE_NODE_TYPE);
 
-				if (sourceNodeType.equals(destinationNodeType) && sourceNodeType.equals("roadm"))
-					fiberFailureSelector.addItem(StringLabeller.unmodifiableOf(linkId, "e" + linkId + " [n" + originNodeId + " (" + netPlan.getNodeName(originNodeId) + ") -> n" + destinationNodeId + " (" + netPlan.getNodeName(destinationNodeId) + ")]"));
+				if(sourceNodeType.equals(destinationNodeType) && sourceNodeType.equals("roadm"))
+					_fiberFailureSelector.addItem(StringLabeller.unmodifiableOf(link.getIndex(), "e" + link.getIndex() + " [n" + originNode.getIndex() + " (" + originNode.getName() + ") -> n" +
+							destinationNode.getIndex() + " (" + destinationNode.getName() + ")]"));
 			}
 		}
 	}
-	
+
 	private void connect()
 	{
-		txt_ip.setEnabled(false);
-		connectToPCE.setEnabled(false);
-		connectToPCE.setBackground(Color.GREEN);
-		disconnectFromPCE.setEnabled(true);
-		
+		_txt_ip.setEnabled(false);
+		_buttonConnectToPCE.setEnabled(false);
+		_buttonConnectToPCE.setBackground(Color.GREEN);
+		_buttonDisconnectFromPCE.setEnabled(true);
+
 		startPCEP();
 	}
-	
-	private BGP4Update createLinkMessage(NetPlan netPlan, long layerId, long linkId, boolean isUp)
+
+	private BGP4Update createLinkMessage(NetPlan netPlan, long linkId, boolean isUp)
 	{
 		try
 		{
@@ -452,7 +468,7 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 			/* Source node */
 			LocalNodeDescriptorsTLV localNodeDescriptors = new LocalNodeDescriptorsTLV();
 			IGPRouterIDNodeDescriptorSubTLV igpRouterIDLNSubTLV = new IGPRouterIDNodeDescriptorSubTLV();
-			igpRouterIDLNSubTLV.setIpv4AddressOSPF(Utils.getLinkSourceIPAddress(netPlan, layerId, linkId));	
+			igpRouterIDLNSubTLV.setIpv4AddressOSPF(Utils.getLinkSourceIPAddress(netPlan, linkId));
 			igpRouterIDLNSubTLV.setIGP_router_id_type(IGPRouterIDNodeDescriptorSubTLV.IGP_ROUTER_ID_TYPE_OSPF_NON_PSEUDO);
 			localNodeDescriptors.setIGPRouterID(igpRouterIDLNSubTLV);
 
@@ -461,7 +477,7 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 			/* Destination node */
 			RemoteNodeDescriptorsTLV remoteNodeDescriptors = new RemoteNodeDescriptorsTLV();
 			IGPRouterIDNodeDescriptorSubTLV igpRouterIDDNSubTLV = new IGPRouterIDNodeDescriptorSubTLV();
-			igpRouterIDDNSubTLV.setIpv4AddressOSPF(Utils.getLinkDestinationIPAddress(netPlan, layerId, linkId));	
+			igpRouterIDDNSubTLV.setIpv4AddressOSPF(Utils.getLinkDestinationIPAddress(netPlan, linkId));
 			igpRouterIDDNSubTLV.setIGP_router_id_type(IGPRouterIDNodeDescriptorSubTLV.IGP_ROUTER_ID_TYPE_OSPF_NON_PSEUDO);
 			remoteNodeDescriptors.setIGPRouterID(igpRouterIDDNSubTLV);
 
@@ -469,20 +485,20 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 
 			/* Interface IP addresses */
 			IPv4InterfaceAddressLinkDescriptorsSubTLV ipv4InterfaceAddressTLV = new IPv4InterfaceAddressLinkDescriptorsSubTLV();
-			ipv4InterfaceAddressTLV.setIpv4Address(Utils.getLinkSourceIPAddress(netPlan, layerId, linkId));
+			ipv4InterfaceAddressTLV.setIpv4Address(Utils.getLinkSourceIPAddress(netPlan, linkId));
 			nlri.setIpv4InterfaceAddressTLV(ipv4InterfaceAddressTLV);
 			IPv4NeighborAddressLinkDescriptorSubTLV ipv4NeighborAddressTLV = new IPv4NeighborAddressLinkDescriptorSubTLV();
-			ipv4NeighborAddressTLV.setIpv4Address(Utils.getLinkDestinationIPAddress(netPlan, layerId, linkId));
+			ipv4NeighborAddressTLV.setIpv4Address(Utils.getLinkDestinationIPAddress(netPlan, linkId));
 			nlri.setIpv4NeighborAddressTLV(ipv4NeighborAddressTLV);
 
 			/* Interface identifiers */
-			String sourceNodeType = netPlan.getNodeAttribute(netPlan.getLinkOriginNode(layerId, linkId), "type");
-			String destinationNodeType = netPlan.getNodeAttribute(netPlan.getLinkDestinationNode(layerId, linkId), "type");
-			if (sourceNodeType.equals(destinationNodeType))
+			String sourceNodeType = netPlan.getLinkFromId(linkId).getOriginNode().getAttribute(es.upct.girtel.net2plan.plugins.activepce.utils.Constants.ATTRIBUTE_NODE_TYPE);
+			String destinationNodeType = netPlan.getLinkFromId(linkId).getDestinationNode().getAttribute(es.upct.girtel.net2plan.plugins.activepce.utils.Constants.ATTRIBUTE_NODE_TYPE);
+			if(sourceNodeType.equals(destinationNodeType)) // That is, both nodes are ROADM
 			{
 				LinkLocalRemoteIdentifiersLinkDescriptorSubTLV linkIdentifiersTLV = new LinkLocalRemoteIdentifiersLinkDescriptorSubTLV();
-				linkIdentifiersTLV.setLinkLocalIdentifier(Utils.getLinkSourceInterface(netPlan, layerId, linkId));
-				linkIdentifiersTLV.setLinkRemoteIdentifier(Utils.getLinkDestinationInterface(netPlan, layerId, linkId));
+				linkIdentifiersTLV.setLinkLocalIdentifier(getLinkSourceInterface(netPlan, linkId));
+				linkIdentifiersTLV.setLinkRemoteIdentifier(Utils.getLinkDestinationInterface(netPlan, linkId));
 				nlri.setLinkIdentifiersTLV(linkIdentifiersTLV);
 			}
 
@@ -494,147 +510,129 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 			PathAttribute mpReachAttribute = isUp ? new Generic_MP_Reach_Attribute() : new Generic_MP_Unreach_Attribute();
 			pathAttributes.add(mpReachAttribute);
 
-	//					if (layerId == 10)
-	//					{
-	//						LabelRangeField_UPCT lambdaSet = new LabelRangeField_UPCT();
-	//						lambdaSet.setAction(2); /* Inclusive set (draft-ietf-ccamp-general-constraint-encode-20, 2.6.2) */
-	//						lambdaSet.setStartLabel(0);
-	//						lambdaSet.setNumLabels(WDMUtils.getFiberNumWavelengths(_netPlan, layerId, linkId));
-	//
-	//						AvailableLabels al = new AvailableLabels();
-	//						al.setLabelSet(lambdaSet);
-	//						
-	//						LinkStateAttribute linkStateAttribute = new LinkStateAttribute();
-	//						linkStateAttribute.setAvailableLabels(al);
-	//						pathAttributes.add(linkStateAttribute);
-	//					}
-
 			/* Create BGP update message */
 			BGP4Update updateMsg = new BGP4Update();
 			updateMsg.setNlri(nlri);
 			updateMsg.setPathAttributes(pathAttributes);
 			updateMsg.encode();
-			
+
 			return updateMsg;
-		}
-		catch(Throwable e)
+		}catch(Throwable e)
 		{
 			throw new RuntimeException(e);
 		}
 	}
-	
+
 	private void performPCERequest()
 	{
 		NetPlan netPlan = getDesign();
-		
+
 		try
 		{
-			if (!(sourceNode.getSelectedItem() instanceof StringLabeller)) throw new Net2PlanException("Bad - No source node was selected");
-			if (!(destinationNode.getSelectedItem() instanceof StringLabeller)) throw new Net2PlanException("Bad - No destination node was selected");
+			if(! (_sourceNode.getSelectedItem() instanceof StringLabeller)) throw new Net2PlanException("Bad - No source node was selected");
+			if(! (_destinationNode.getSelectedItem() instanceof StringLabeller)) throw new Net2PlanException("Bad - No destination node was selected");
 
-			long sourceNodeId = (Long) ((StringLabeller) sourceNode.getSelectedItem()).getObject();
-			long destinationNodeId = (Long) ((StringLabeller) destinationNode.getSelectedItem()).getObject();
-			if (sourceNodeId == destinationNodeId) throw new Net2PlanException("Bad - End nodes cannot be the same");
-			
+			int sourceNodeIndex = (int) ((StringLabeller) _sourceNode.getSelectedItem()).getObject();
+			int destinationNodeIndex = (int) ((StringLabeller) _destinationNode.getSelectedItem()).getObject();
+			if(sourceNodeIndex == destinationNodeIndex) throw new Net2PlanException("Bad - End nodes cannot be the same");
+
+			Node sourceNode = netPlan.getNode(sourceNodeIndex);
+			Node destinationNode = netPlan.getNode(destinationNodeIndex);
+
 			float bandwidthInGbps;
 			Map<String, String> attributeMap = new LinkedHashMap<String, String>();
-			
+
 			Request req = new Request();
 			BandwidthRequested bw = new BandwidthRequested();
 			try
 			{
-				String str_bandwidth = txt_bandwidth.getText();
+				String str_bandwidth = _txt_bandwidth.getText();
 				bandwidthInGbps = Float.parseFloat(str_bandwidth);
-				if (bandwidthInGbps <= 0) throw new RuntimeException();
+				if(bandwidthInGbps <= 0) throw new RuntimeException();
 				bw.setBw(bandwidthInGbps * 1E9f / 8f);
 
 				req.setBandwidth(bw);
-			}
-			catch(Throwable e)
+			}catch(Throwable e)
 			{
 				throw new Net2PlanException("Bad - Requested bandwidth must be greater or equal than zero");
 			}
-			
+
 			EndPointsIPv4 endpoints = new EndPointsIPv4();
-			endpoints.setSourceIP(Utils.getNodeIPAddress(netPlan, sourceNodeId));
-			endpoints.setDestIP(Utils.getNodeIPAddress(netPlan, destinationNodeId));
+			endpoints.setSourceIP(Utils.getNodeIPAddress(netPlan, sourceNode.getId()));
+			endpoints.setDestIP(Utils.getNodeIPAddress(netPlan, destinationNode.getId()));
 			req.setEndPoints(endpoints);
-			
-			if (loadBalancingEnabled.isSelected())
+
+			if(_loadBalancingEnabled.isSelected())
 			{
-				LoadBalancing loadBalancing = new LoadBalancing_UPCT(); //FIXME change to original Load Balancing (and add toString)
+				LoadBalancing loadBalancing = new LoadBalancing();
 
 				try
 				{
-					String str_maxBifurcation = txt_maxBifurcation.getText();
+					String str_maxBifurcation = _txt_maxBifurcation.getText();
 					int allowedBifurcationDegree = Integer.parseInt(str_maxBifurcation);
-					if (allowedBifurcationDegree <= 0) throw new RuntimeException();
-					
-					attributeMap.put("allowedBifurcationDegree", Integer.toString(allowedBifurcationDegree));
+					if(allowedBifurcationDegree <= 0) throw new RuntimeException();
+
+					attributeMap.put(es.upct.girtel.net2plan.plugins.activepce.utils.Constants.ATTRIBUTE_MAX_BIFURCATION, Integer.toString(allowedBifurcationDegree));
 					loadBalancing.setMaxLSP(allowedBifurcationDegree);
-				}
-				catch(Throwable e)
+				}catch(Throwable e)
 				{
 					throw new Net2PlanException("Bad - Maximum number of paths must be greater than zero");
 				}
-				
+
 				try
 				{
-					String str_minBandwidthPerPath = txt_minBandwidthPerPath.getText();
+					String str_minBandwidthPerPath = _txt_minBandwidthPerPath.getText();
 					float minBandwidthPerPathInGbps = Float.parseFloat(str_minBandwidthPerPath);
-					if (minBandwidthPerPathInGbps <= 0) throw new RuntimeException();
-					
-					attributeMap.put("minBandwidthPerPathInGbps", Float.toString(minBandwidthPerPathInGbps));
+					if(minBandwidthPerPathInGbps <= 0) throw new RuntimeException();
+
+					attributeMap.put(es.upct.girtel.net2plan.plugins.activepce.utils.Constants.ATTRIBUTE_MIN_BANDWIDTH, Float.toString(minBandwidthPerPathInGbps));
 					loadBalancing.setMinBandwidth(minBandwidthPerPathInGbps * 1E9f / 8f);
-				}
-				catch(Throwable e)
+				}catch(Throwable e)
 				{
 					throw new Net2PlanException("Bad - Minimum bandwidth per path must be greater or equal than zero");
 				}
-				
+
 				req.setLoadBalancing(loadBalancing);
 			}
 
 			long requestId = Utils.getNewReqIDCounter();
-			attributeMap.put("requestId", Long.toString(requestId));
-			netPlan.addDemand(1, sourceNodeId, destinationNodeId, bandwidthInGbps, attributeMap);
+			attributeMap.put(es.upct.girtel.net2plan.plugins.activepce.utils.Constants.ATTRIBUTE_REQUEST_ID, Long.toString(requestId));
+			netPlan.addDemand(sourceNode, destinationNode, bandwidthInGbps, attributeMap, _ipLayer);
 			updateNetPlanView();
-				
+
 			RequestParameters requestParameters = new RequestParameters();
 			requestParameters.setRequestID(requestId);
-			
+
 			PCEPRequest pcepRequest = new PCEPRequest();
 			pcepRequest.addRequest(req);
 			req.setRequestParameters(requestParameters);
 			pcepRequest.encode();
-			Utils.writeMessage(pcepSocket.getOutputStream(), pcepRequest.getBytes());
-			
-			updateOperationLog(">>PCEP REQ sent: "+pcepRequest.toString());
-		}
-		catch(Net2PlanException e)
+			Utils.writeMessage(_pcepSocket.getOutputStream(), pcepRequest.getBytes());
+
+			updateOperationLog(">>PCEP REQ sent: " + pcepRequest.toString());
+		}catch(Net2PlanException e)
 		{
-			if (ErrorHandling.isDebugEnabled()) ErrorHandling.addErrorOrException(e, NetworkEmulatorPCC.class);
+			if(ErrorHandling.isDebugEnabled()) ErrorHandling.addErrorOrException(e, NetworkEmulatorPCC.class);
 			ErrorHandling.showErrorDialog(e.getMessage(), "Unable to make PCERequest");
-		}
-		catch(Throwable e)
+		}catch(Throwable e)
 		{
 			ErrorHandling.addErrorOrException(e, NetworkEmulatorPCC.class);
 			ErrorHandling.showErrorDialog("Unable to make PCERequest");
 		}
 	}
-	
+
 	private void sendNetworkState(OutputStream os)
 	{
 		List<BGP4Update> topologyMessages = new LinkedList<BGP4Update>();
-		
+
 		NetPlan netPlan = getDesign();
-		Set<Long> nodeIds = netPlan.getNodeIds();
-		for (long nodeId : nodeIds)
+		List<Node> nodes = netPlan.getNodes();
+		for(Node node : nodes)
 		{
 			try
 			{
 				/* Create node IP descriptor */
-				Inet4Address nodeIPAddress = Utils.getNodeIPAddress(netPlan, nodeId);
+				Inet4Address nodeIPAddress = Utils.getNodeIPAddress(netPlan, node.getId());
 				IGPRouterIDNodeDescriptorSubTLV igpRouterIDLNSubTLV = new IGPRouterIDNodeDescriptorSubTLV();
 				igpRouterIDLNSubTLV.setIpv4AddressOSPF(nodeIPAddress);
 				igpRouterIDLNSubTLV.setIGP_router_id_type(IGPRouterIDNodeDescriptorSubTLV.IGP_ROUTER_ID_TYPE_OSPF_NON_PSEUDO);
@@ -648,43 +646,42 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 				NodeNLRI nlri = new NodeNLRI();
 				nlri.setProtocolID(ProtocolIDCodes.Direct_Protocol_ID); /* Direct (see draft-ietf-idr-ls-distribution-10) */
 				nlri.setLocalNodeDescriptors(nodeDescriptor);
-				nlri.setRoutingUniverseIdentifier(netPlan.getNodeAttribute(nodeId, "type").equals("ipRouter") ? RoutingUniverseIdentifierTypes.Level3Identifier : RoutingUniverseIdentifierTypes.Level1Identifier);
+				nlri.setRoutingUniverseIdentifier(node.getAttribute(es.upct.girtel.net2plan.plugins.activepce.utils.Constants.ATTRIBUTE_NODE_TYPE).equals(es.upct.girtel.net2plan.plugins.activepce
+						.utils.Constants.NODE_TYPE_IPROUTER) ?
+						RoutingUniverseIdentifierTypes.Level3Identifier :
+						RoutingUniverseIdentifierTypes.Level1Identifier);
 
 				/* Create path attributes (otherwise, PCE will not be able to decode the message (error?) */
 				OriginAttribute or = new OriginAttribute();
 				or.setValue(PathAttributesTypeCode.PATH_ATTRIBUTE_ORIGIN_IGP);
 				ArrayList<PathAttribute> pathAttributes = new ArrayList<PathAttribute>();
 				pathAttributes.add(or);
-				MP_Reach_Attribute mpReachAttribute = new Generic_MP_Reach_Attribute();
-//				BGP_LS_MP_Reach_Attribute mpReachAttribute = new BGP_LS_MP_Reach_Attribute();
-//				mpReachAttribute.setLsNLRI(nlri);
-				pathAttributes.add(mpReachAttribute);
+				PathAttribute reachAttribute = node.isUp() ? new Generic_MP_Reach_Attribute() : new Generic_MP_Unreach_Attribute();
+				pathAttributes.add(reachAttribute);
 
 				/* Create BGP update message */
 				BGP4Update updateMsg = new BGP4Update();
 				updateMsg.setNlri(nlri);
 				updateMsg.setPathAttributes(pathAttributes);
 				updateMsg.encode();
-				
+
 				topologyMessages.add(updateMsg);
-			}
-			catch(Throwable e)
+			}catch(Throwable e)
 			{
-				e.printStackTrace(); //DEBUG
+				e.printStackTrace();
 				throw new RuntimeException(e);
 			}
 		}
 
-		Set<Long> layerIds = netPlan.getLayerIds();
-		for(long layerId : layerIds)
+		List<NetworkLayer> layers = netPlan.getNetworkLayers();
+
+		for(NetworkLayer layer : layers)
 		{
 			try
 			{
-				Set<Long> linkIds = netPlan.getLinkIds(layerId);
-				for(long linkId : linkIds)
-					topologyMessages.add(createLinkMessage(netPlan, layerId, linkId, true));
-			}
-			catch(Throwable e)
+				for(Link link : netPlan.getLinks(layer))
+					topologyMessages.add(createLinkMessage(netPlan, link.getId(), true));
+			}catch(Throwable e)
 			{
 				throw new RuntimeException(e);
 			}
@@ -695,57 +692,54 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 			Utils.writeMessage(os, updateMsg.getBytes());
 		}
 	}
-	
+
 	private void shutdown()
 	{
-		txt_ip.setEnabled(true);
-		connectToPCE.setEnabled(true);
-		connectToPCE.setBackground(Color.RED);
-		disconnectFromPCE.setEnabled(false);
+		_txt_ip.setEnabled(true);
+		_buttonConnectToPCE.setEnabled(true);
+		_buttonConnectToPCE.setBackground(Color.RED);
+		_buttonDisconnectFromPCE.setEnabled(false);
 
-		if (pcepThread != null)
+		if(_pcepThread != null)
 		{
 			try
 			{
 				PCEPClose pcepClose = new PCEPClose();
 				pcepClose.setReason(1);
 				pcepClose.encode();
-				Utils.writeMessage(pcepSocket.getOutputStream(), pcepClose.getBytes());
-			}
-			catch(Throwable e)
+				Utils.writeMessage(_pcepSocket.getOutputStream(), pcepClose.getBytes());
+			}catch(Throwable e)
 			{
-				try { pcepSocket.close(); }
-				catch(Throwable e1) { }
-				
-				pcepSocket = null;
-				pcepThread = null;
+				try{ _pcepSocket.close(); }catch(Throwable e1){ }
+
+				_pcepSocket = null;
+				_pcepThread = null;
 			}
 		}
 
-		if (bgplsThread != null)
+		if(_bgplsThread != null)
 		{
-			try { bgplsSocket.close(); }
-			catch(Throwable e1) { }
-				
-			bgplsSocket = null;
-			bgplsThread = null;
+			try{ _bgplsSocket.close(); }catch(Throwable e1){ }
+
+			_bgplsSocket = null;
+			_bgplsThread = null;
 		}
 	}
 
 	private void startBGPLS()
 	{
-		bgplsThread = new Thread(new BGPThread());
-		bgplsThread.setDaemon(true);
-		bgplsThread.start();
+		_bgplsThread = new Thread(new BGPThread());
+		_bgplsThread.setDaemon(true);
+		_bgplsThread.start();
 	}
-	
+
 	private void startPCEP()
 	{
-		pcepThread = new Thread(new PCEPThread());
-		pcepThread.setDaemon(true);
-		pcepThread.start();
+		_pcepThread = new Thread(new PCEPThread());
+		_pcepThread.setDaemon(true);
+		_pcepThread.start();
 	}
-	
+
 	private void updateOperationLog(String message)
 	{
 		log.append(message);
@@ -760,15 +754,15 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 			try
 			{
 				/* Start socket */
-				InetAddress pceIPAddress = Inet4Address.getByName(txt_ip.getText());
+				InetAddress pceIPAddress = Inet4Address.getByName(_txt_ip.getText());
 				updateOperationLog("Connecting to BGP/LS in " + pceIPAddress);
-				bgplsSocket = new Socket(pceIPAddress, es.upct.girtel.net2plan.plugins.activepce.utils.Constants.BGP_SERVER_PORT);
-				InputStream inBGP = bgplsSocket.getInputStream();
-				OutputStream outBGP = bgplsSocket.getOutputStream();
+				_bgplsSocket = new Socket(pceIPAddress, es.upct.girtel.net2plan.plugins.activepce.utils.Constants.BGP_SERVER_PORT);
+				InputStream inBGP = _bgplsSocket.getInputStream();
+				OutputStream outBGP = _bgplsSocket.getOutputStream();
 				
 				/* Sending BGP/LS OPEN message */
 				BGP4Open bgpopenmessage = new BGP4Open();
-				bgpopenmessage.setBGPIdentifier((Inet4Address) bgplsSocket.getLocalAddress()); //DO NOT FORGET TO SET THE IDENTIFIER!
+				bgpopenmessage.setBGPIdentifier((Inet4Address) _bgplsSocket.getLocalAddress()); //DO NOT FORGET TO SET THE IDENTIFIER!
 
 				/* Add Link-State NLRI capability advertisement to BGP OPEN message */
 				LinkedList<BGP4OptionalParameter> bgpOpenParameterList = new LinkedList<BGP4OptionalParameter>();
@@ -786,7 +780,7 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 				bgpopenmessage.encode();
 				Utils.writeMessage(outBGP, bgpopenmessage.getBytes());
 				updateOperationLog(">> BGP4Open() sent");
-				
+
 				boolean sessionOpened = false;
 				byte[] msg;
 				while((msg = Utils.readBGP4Msg(inBGP)) != null)
@@ -795,12 +789,11 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 					switch(msgType)
 					{
 						case BGP4MessageTypes.MESSAGE_OPEN:
-							if (sessionOpened)
+							if(sessionOpened)
 							{
 								/* If session was opened already, then close */
 								shutdown();
-							}
-							else
+							} else
 							{
 								updateOperationLog(">> BGP4Open() received");
 								
@@ -809,28 +802,27 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 								keekaliveMsg.encode();
 								Utils.writeMessage(outBGP, keekaliveMsg.getBytes());
 								updateOperationLog(">> BGP4Keepalive() sent");
-								
+
 								sessionOpened = true;
 								
 								/* Start BGP/LS session */
 								updateOperationLog("Sendind Network State...");
 								sendNetworkState(outBGP);
 							}
-							
-							break;							
+
+							break;
 
 						case BGP4MessageTypes.MESSAGE_KEEPALIVE:
 							updateOperationLog(">> BGP4Keepalive() received");
 							break;
-							
+
 						default:
 							/* No other message can be received */
 							shutdown();
 							break;
 					}
 				}
-			}
-			catch (Throwable e)
+			}catch(Throwable e)
 			{
 				e.printStackTrace();
 				System.err.println("Caught exception " + e.toString());
@@ -838,7 +830,7 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 			}
 		}
 	}
-	
+
 	private class PCEPThread implements Runnable
 	{
 		@Override
@@ -847,107 +839,126 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 			try
 			{
 				/* Start socket */
-				InetAddress pceIPAddress = Inet4Address.getByName(txt_ip.getText());
+				InetAddress pceIPAddress = Inet4Address.getByName(_txt_ip.getText());
 				updateOperationLog("Connecting to PCE in " + pceIPAddress);
-				pcepSocket = new Socket(pceIPAddress, es.upct.girtel.net2plan.plugins.activepce.utils.Constants.PCEP_SERVER_PORT);
-				InputStream inPCEP = pcepSocket.getInputStream();
-				OutputStream outPCEP = pcepSocket.getOutputStream();
+				_pcepSocket = new Socket(pceIPAddress, es.upct.girtel.net2plan.plugins.activepce.utils.Constants.PCEP_SERVER_PORT);
+				InputStream inPCEP = _pcepSocket.getInputStream();
+				OutputStream outPCEP = _pcepSocket.getOutputStream();
 				
 				/* Sending PCEP OPEN message */
 				PCEPOpen openMsg = new PCEPOpen();
 				openMsg.encode();
 				Utils.writeMessage(outPCEP, openMsg.getBytes());
 				updateOperationLog(">> PCEPOpen() sent");
-				
+
 				boolean sessionOpened = false;
 				byte[] msg;
 				while((msg = Utils.readPCEPMsg(inPCEP)) != null)
 				{
 					int msgType = PCEPMessage.getMessageType(msg);
-					
+
 					NetPlan netPlan = getDesign();
+
 					switch(msgType)
 					{
 						case PCEPMessageTypes.MESSAGE_OPEN:
-							if (sessionOpened)
+							if(sessionOpened)
 							{
 								/* If session was opened already, then close */
 								PCEPClose pcepClose = new PCEPClose();
 								pcepClose.setReason(1);
 								pcepClose.encode();
-								Utils.writeMessage(pcepSocket.getOutputStream(), pcepClose.getBytes());
-								updateOperationLog(">> Unexpected PCEPOpen() received, PCEPClose() sent");
-							}
-							else
+								Utils.writeMessage(_pcepSocket.getOutputStream(), pcepClose.getBytes());
+								updateOperationLog("<< Unexpected PCEPOpen() received, PCEPClose() sent");
+							} else
 							{
-								updateOperationLog(">> PCEPOpen() received");
+								updateOperationLog("<< PCEPOpen() received");
 								
 								/* Sending PCEP keepalive message */
 								PCEPKeepalive keepalive = new PCEPKeepalive();
 								keepalive.encode();
 								Utils.writeMessage(outPCEP, keepalive.getBytes());
 								updateOperationLog(">> PCEPKeepalive() sent");
-								
+
 								sessionOpened = true;
 								
 								/* Start BGP/LS session */
 								startBGPLS();
 							}
-							
-							break;							
+
+							break;
 
 						case PCEPMessageTypes.MESSAGE_KEEPALIVE:
-							updateOperationLog(">> PCEPKeepalive() received");
+							updateOperationLog("<< PCEPKeepalive() received");
 							break;
-							
+
 						case PCEPMessageTypes.MESSAGE_UPDATE:
 							PCEPUpdate updateMsg = new PCEPUpdate(msg);
-							
-							Iterator<Long> routeIt = netPlan.getRouteIds(0).iterator();
+							updateOperationLog(">> PCEP UPDATE received ");
+							System.out.println("PCEP Message received after operation log"); //DEBUG
 							List<UpdateRequest> list = updateMsg.getUpdateRequestList();
-							
 							updateOperationLog(updateMsg.toString());
-							
+
 							for(UpdateRequest updateRequest : list)
 							{
-								long routeId_lowerLayer = routeIt.next();
-								
+								int routeOriginalWavelength = updateRequest.getLsp().getLspId();
+								long routeToRepair = - 1;
+
 								Path path1 = updateRequest.getPath();
-								List<Long> seqFibers = new LinkedList<Long>();
-								List<Integer> seqWavelengths = new LinkedList<Integer>();
-								
+								List<Long> seqFibers = new LinkedList<>();
+								List<Integer> seqWavelengths = new LinkedList<>();
+								List<Node> seqRouteNodes;
+								List<Node> seqRequestNodes;
+
 								updateOperationLog(path1.toString());
-								
+
 								ExplicitRouteObject ero1 = path1.geteRO();
-								for(EROSubobject eroSubobject1 : ero1.getEROSubobjectList())
+								for(Route affectedRoute : netPlan.getRoutesDown(_wdmLayer))
 								{
-									if (eroSubobject1 instanceof UnnumberIfIDEROSubobject)
+									seqRouteNodes = affectedRoute.getSeqNodesRealPath();
+									seqRequestNodes = new LinkedList<>();
+									int[] affectedRouteSeqWavelengths = WDMUtils.getLightpathSeqWavelengths(affectedRoute);
+
+									for(EROSubobject eroSubobject1 : ero1.getEROSubobjectList())
 									{
-										UnnumberIfIDEROSubobject eroInfo = (UnnumberIfIDEROSubobject) eroSubobject1;
-										long nodeId = Utils.getNodeByIPAddress(netPlan, eroInfo.getRouterID());
-										if (nodeId == netPlan.getRouteEgressNode(0, routeId_lowerLayer)) break;
-										
-										long interfaceId = eroInfo.getInterfaceID();
-										long fiberId = Utils.getLinkBySourceInterface(netPlan, 0, nodeId, interfaceId);
-										seqFibers.add(fiberId);
+										if(eroSubobject1 instanceof UnnumberIfIDEROSubobject)
+										{
+											UnnumberIfIDEROSubobject eroInfo = (UnnumberIfIDEROSubobject) eroSubobject1;
+											long nodeId = Utils.getNodeByIPAddress(netPlan, eroInfo.getRouterID());
+											seqRequestNodes.add(netPlan.getNodeFromId(nodeId));
+											if(nodeId == seqRouteNodes.get(seqRouteNodes.size() - 1).getId()) break; //Last node
+
+											long interfaceId = eroInfo.getInterfaceID();
+											long fiberId = Utils.getLinkBySourceInterface(netPlan, _wdmLayer, nodeId, interfaceId);
+											seqFibers.add(fiberId);
+										} else if(eroSubobject1 instanceof GeneralizedLabelEROSubobject)
+										{
+											DWDMWavelengthLabel wavelengthLabel = ((GeneralizedLabelEROSubobject) eroSubobject1).getDwdmWavelengthLabel();
+											int wavelengthId = wavelengthLabel.getN();
+											seqWavelengths.add(wavelengthId);
+										}
 									}
-									else if (eroSubobject1 instanceof GeneralizedLabelEROSubobject)
+
+									Node originalOrginNode = affectedRoute.getIngressNode();
+									Node originalDestinaNode = affectedRoute.getEgressNode();
+									Node requestedOriginNode = seqRequestNodes.get(0);
+									Node requestedDestinationNode = seqRequestNodes.get(seqRequestNodes.size() - 1);
+									if(originalOrginNode == requestedOriginNode && originalDestinaNode == requestedDestinationNode && seqWavelengths.get(0) == affectedRouteSeqWavelengths[0])
 									{
-										DWDMWavelengthLabel wavelengthLabel = ((GeneralizedLabelEROSubobject) eroSubobject1).getDwdmWavelengthLabel();
-										int wavelengthId = wavelengthLabel.getN();
-										
-										seqWavelengths.add(wavelengthId);
+										routeToRepair = affectedRoute.getId();
+										break;
 									}
 								}
+								if(routeToRepair == - 1) throw new Net2PlanException("Request to reapair a route that doesn't exist");
 
-								/* Map of original sequence of fibers */
-								Set<Long> originalSeqFIbers = new LinkedHashSet<Long>(netPlan.getRouteSequenceOfLinks(0, routeId_lowerLayer));
-								routeOriginalLinks.put(routeId_lowerLayer, originalSeqFIbers);
+								/* Create the sequence of link fibers*/
+								List<Link> seqLinkFibers = new LinkedList<>();
+								for(long fiberId : seqFibers) seqLinkFibers.add(netPlan.getLinkFromId(fiberId));
 
-								netPlan.setRouteSequenceOfLinks(0, routeId_lowerLayer, seqFibers);
-								WDMUtils.setLightpathSeqWavelengths(netPlan, 0, routeId_lowerLayer, IntUtils.toArray(seqWavelengths));
-								netPlan.setRouteUp(0, routeId_lowerLayer);
-								
+								Route route = netPlan.getRouteFromId(routeToRepair);
+								route.setSeqLinksAndProtectionSegments(seqLinkFibers);
+								WDMUtils.setLightpathSeqWavelengths(route, IntUtils.toArray(seqWavelengths));
+
 								PCEPReport report = new PCEPReport();
 								report.setStateReportList(new LinkedList<StateReport>());
 								StateReport stateReport = new StateReport();
@@ -957,99 +968,66 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 								report.encode();
 								Utils.writeMessage(outPCEP, report.getBytes());
 							}
-							
+
 							updateNetPlanView();
-							
-//							PCEPUpdate update = new PCEPUpdate();
-//							update.setUpdateRequestList(new LinkedList<UpdateRequest>());
-//							
-//							UpdateRequest updateRequest1 = new UpdateRequest();
-//							update.addStateReport(updateRequest1);
-//							
-//							LSP lsp = new LSP();
-//							lsp.setLspId(0);
-//							lsp.setaFlag(true);
-//							updateRequest1.setLSP(lsp);
-//							
-//							Path path = new Path();
-//							ExplicitRouteObject ero = new ExplicitRouteObject();
-//							path.seteRO(ero);
-//							updateRequest1.setPath(path);
-							
+
 							break;
-							
+
 						case PCEPMessageTypes.MESSAGE_PCREP:
 							PCEPResponse responseMsg = new PCEPResponse(msg);
-							
+
 							for(Response response : responseMsg.getResponseList())
 							{
-								updateOperationLog("<<PCEP REP received: "+response.toString());
-								
-								if (response.getNoPath() != null) continue;
-								
-								long demandId = netPlan.getDemandByAttribute(1, "requestId", Long.toString(response.getRequestParameters().getRequestID()));
-								long egressNodeId = netPlan.getDemandEgressNode(1, demandId);
-								
-								Path path1 = response.getPath(0);
-								float bandwidthInGbps = ((BandwidthRequested) response.getBandwidth()).getBw() * 8f / 1E9f;
-								
-								List<Long> seqLinks = new LinkedList<Long>();
-								List<Long> seqFibers = new LinkedList<Long>();
-								List<Integer> seqWavelengths = new LinkedList<Integer>();
-								
-								ExplicitRouteObject ero1 = path1.geteRO();
-								for(EROSubobject eroSubobject1 : ero1.getEROSubobjectList())
-								{
-									if (eroSubobject1 instanceof IPv4prefixEROSubobject)
-									{
-										if (!seqFibers.isEmpty()) //!
-										{
-											long originNodeId = netPlan.getLinkOriginNode(0, seqFibers.get(0));
-											long destinationNodeId = netPlan.getLinkDestinationNode(0, seqFibers.get(seqFibers.size() - 1));
-											long demandId_lowerLayer = netPlan.addDemand(0, originNodeId, destinationNodeId, 40, null);
-											long routeId_lowerLayer = netPlan.addRoute(0, demandId_lowerLayer, 40, 1, seqFibers, null); //FIXME Parametize this
-											WDMUtils.setLightpathSeqWavelengths(netPlan, 0, routeId_lowerLayer, IntUtils.toArray(seqWavelengths));
+								updateOperationLog("<<PCEP REP received: " + response.toString());
 
-											long linkId = netPlan.createUpperLayerLinkFromDemand(0, demandId_lowerLayer, 1);
-											seqLinks.add(linkId);
-										}
-										
-										Inet4Address ipAddress = ((IPv4prefixEROSubobject) eroSubobject1).getIpv4address();
-										long nodeId = Utils.getNodeByIPAddress(netPlan, ipAddress);
-										if (nodeId == egressNodeId)
+								if(response.getNoPath() != null) continue;
+
+								List<Demand> demands = netPlan.getDemands(_ipLayer);
+								Demand ipDemand = null;
+								for(Demand demand : demands)
+								{
+									if(demand.getAttribute(es.upct.girtel.net2plan.plugins.activepce.utils.Constants.ATTRIBUTE_REQUEST_ID) != null)
+									{
+										String requestId = demand.getAttribute(es.upct.girtel.net2plan.plugins.activepce.utils.Constants.ATTRIBUTE_REQUEST_ID);
+										if(Long.toString(response.getRequestParameters().getRequestID()).equals(requestId))
 										{
-											seqLinks.add(Utils.getLinkByDestinationIPAddress(netPlan, 1, ipAddress));
+											ipDemand = demand;
 											break;
 										}
-										else
-										{
-											seqLinks.add(Utils.getLinkBySourceIPAddress(netPlan, 1, ipAddress));
-										}
-									}
-									else if (eroSubobject1 instanceof UnnumberIfIDEROSubobject)
-									{
-										UnnumberIfIDEROSubobject eroInfo = (UnnumberIfIDEROSubobject) eroSubobject1;
-										long nodeId = Utils.getNodeByIPAddress(netPlan, eroInfo.getRouterID());
-										long interfaceId = eroInfo.getInterfaceID();
-										long fiberId = Utils.getLinkBySourceInterface(netPlan, 0, nodeId, interfaceId);
-										seqFibers.add(fiberId);
-									}
-									else if (eroSubobject1 instanceof GeneralizedLabelEROSubobject)
-									{
-										DWDMWavelengthLabel wavelengthLabel = ((GeneralizedLabelEROSubobject) eroSubobject1).getDwdmWavelengthLabel();
-										int wavelengthId = wavelengthLabel.getN();
-										
-										seqWavelengths.add(wavelengthId);
 									}
 								}
+								if(ipDemand == null) throw new Net2PlanException("The request ID received does not exist");
 
-								netPlan.addRoute(1, demandId, bandwidthInGbps, seqLinks, null); //FIXME error al añadir dos demandas seguidas con mismo origen y destino
-	
+								long egressNodeId = ipDemand.getEgressNode().getId();
+
+								Path path1 = response.getPath(0);
+								float bandwidthInGbps = ((BandwidthRequested) response.getBandwidth()).getBw() * 8f / 1E9f;
+
+								List<Link> seqLinks = new LinkedList<>();
+								List<Link> seqFibers = new LinkedList<>();
+								List<Integer> seqWavelengths = new LinkedList<Integer>();
+
+								ExplicitRouteObject ero1 = path1.geteRO();
+								boolean isMultilayer = false;
+								for(EROSubobject subEro : ero1.getEROSubobjectList())
+									if(subEro instanceof UnnumberIfIDEROSubobject)
+									{
+										isMultilayer = true;
+										break;
+									}
+
+								if(isMultilayer) handleResponseMultiLayer(netPlan, egressNodeId, seqLinks, seqFibers, seqWavelengths, ero1);
+								else handleResponseSingleLayer(netPlan, seqLinks, ero1);
+
+								System.out.println();
+								netPlan.addRoute(ipDemand, bandwidthInGbps, bandwidthInGbps, seqLinks, null); //FIXME error when adding two consecutive routes between the same pair of
+								// nodes
+
 								PCEPReport report1 = new PCEPReport();
 								report1.setStateReportList(new LinkedList<StateReport>());
-								
+
 								LSP lsp1 = new LSP();
-								lsp1.setDFlag(true);
+								lsp1.setDFlag(true); //Set DELEGATE to true
 								lsp1.setLspId(0);
 								StateReport stateReport = new StateReport();
 								stateReport.setLSP(lsp1);
@@ -1058,58 +1036,125 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 
 								report1.encode();
 								Utils.writeMessage(outPCEP, report1.getBytes());
-								
+
 								updateNetPlanView();
 							}
-							
+
 							break;
-							
+
 						case PCEPMessageTypes.MESSAGE_REPORT:
 							/* ToDo */
 							break;
-							
+
 						default:
 							break;
 					}
 				}
-			}
-			catch (Throwable e)
+			}catch(Throwable e)
 			{
 				e.printStackTrace();
 				System.err.println("Caught exception " + e.toString());
 				shutdown();
 			}
 		}
+
+		private void handleResponseSingleLayer(NetPlan netPlan, List<Link> seqLinks, ExplicitRouteObject ero1) throws UnknownHostException
+		{
+			List<EROSubobject> eroSubobjects = ero1.getEROSubobjectList();
+			for(int i = 1; i < eroSubobjects.size(); i++) //FIXME may throw exception if path is less than size 2!
+			{
+
+				if(! (eroSubobjects.get(i - 1) instanceof IPv4prefixEROSubobject) || ! (eroSubobjects.get(i) instanceof IPv4prefixEROSubobject))
+					throw new Net2PlanException("Bad. All ERO Subobjects should be of type IPv4");
+				Inet4Address sourceIPAddress = ((IPv4prefixEROSubobject) eroSubobjects.get(i - 1)).getIpv4address();
+				Inet4Address destinationIPAddress = ((IPv4prefixEROSubobject) eroSubobjects.get(i)).getIpv4address();
+
+				Set<Link> possibleLinks = Utils.getLinksBySourceDestinationIPAddresses(netPlan, _ipLayer, sourceIPAddress, destinationIPAddress); //FIXME fix wehn more than 1 possible link!
+				seqLinks.add(possibleLinks.iterator().next());
+				System.out.println("added =" + possibleLinks.iterator().next());
+			}
+
+			//Last links has to be retrieved from the outside
+			EROSubobject aux = eroSubobjects.get(eroSubobjects.size() - 1);
+			Inet4Address lastAddress = ((IPv4prefixEROSubobject) aux).getIpv4address();
+			long linkId = Utils.getLinkBySourceIPAddress(netPlan, _ipLayer, lastAddress);
+			seqLinks.add(netPlan.getLinkFromId(linkId));
+		}
+
+		private void handleResponseMultiLayer(NetPlan netPlan, long egressNodeId, List<Link> seqLinks, List<Link> seqFibers, List<Integer> seqWavelengths, ExplicitRouteObject ero1) throws
+				UnknownHostException
+		{
+			for(EROSubobject eroSubobject1 : ero1.getEROSubobjectList())
+			{
+				if(eroSubobject1 instanceof IPv4prefixEROSubobject)
+				{
+					if(! seqFibers.isEmpty()) //!
+					{
+						Node originNode = seqFibers.get(0).getOriginNode();
+						Node destinationNode = seqFibers.get(seqFibers.size() - 1).getDestinationNode();
+						Demand wdmDemand = netPlan.addDemand(originNode, destinationNode, es.upct.girtel.net2plan.plugins.activepce.utils.Constants.LIGHTPATH_BINARY_RATE_GBPS,
+								null, _wdmLayer);
+						Route wdmRoute = netPlan.addRoute(wdmDemand, es.upct.girtel.net2plan.plugins.activepce.utils.Constants.LIGHTPATH_BINARY_RATE_GBPS, es.upct.girtel.net2plan
+								.plugins.activepce.utils.Constants.LIGHTPATH_BINARY_RATE_GBPS, seqFibers, null);
+						WDMUtils.setLightpathSeqWavelengths(wdmRoute, IntUtils.toArray(seqWavelengths));
+						WDMUtils.setLightpathSeqWavelengthsInitialRoute(wdmRoute, IntUtils.toArray(seqWavelengths));
+
+						Link ipLink = netPlan.addLink(originNode, destinationNode, es.upct.girtel.net2plan.plugins.activepce.utils.Constants.LIGHTPATH_BINARY_RATE_GBPS, 0, Double
+								.MAX_VALUE, null, _ipLayer);
+						ipLink.coupleToLowerLayerDemand(wdmDemand);
+						seqLinks.add(ipLink);
+					}
+
+					Inet4Address ipAddress = ((IPv4prefixEROSubobject) eroSubobject1).getIpv4address();
+					long nodeId = Utils.getNodeByIPAddress(netPlan, ipAddress);
+					if(nodeId == egressNodeId)
+					{
+						Long linkId = Utils.getLinkByDestinationIPAddress(netPlan, _ipLayer, ipAddress);
+						seqLinks.add(netPlan.getLinkFromId(linkId));
+						break;
+					} else
+					{
+						long linkId = Utils.getLinkBySourceIPAddress(netPlan, _ipLayer, ipAddress);
+						seqLinks.add(netPlan.getLinkFromId(linkId));
+					}
+				} else if(eroSubobject1 instanceof UnnumberIfIDEROSubobject)
+				{
+					UnnumberIfIDEROSubobject eroInfo = (UnnumberIfIDEROSubobject) eroSubobject1;
+					long nodeId = Utils.getNodeByIPAddress(netPlan, eroInfo.getRouterID());
+					long interfaceId = eroInfo.getInterfaceID();
+
+					long fiberId = Utils.getLinkBySourceInterface(netPlan, _wdmLayer, nodeId, interfaceId);
+					seqFibers.add(netPlan.getLinkFromId(fiberId));
+				} else if(eroSubobject1 instanceof GeneralizedLabelEROSubobject)
+				{
+					DWDMWavelengthLabel wavelengthLabel = ((GeneralizedLabelEROSubobject) eroSubobject1).getDwdmWavelengthLabel();
+					int wavelengthId = wavelengthLabel.getN();
+
+					seqWavelengths.add(wavelengthId);
+				}
+			}
+		}
 	}
 
 	@Override
-	public void showRoute(long layerId, long routeId)
+	public void showRoute(long routeId)
 	{
-		System.out.println("Showing route!"); //DEBUG
-		selectNetPlanViewItem(layerId, Constants.NetworkElementType.ROUTE, routeId);
 
-		NetPlan currentState = getDesign();
-		NetPlan initialState = getInitialDesign();
-		Set<Long> pri_seqLinks = new LinkedHashSet<Long>(currentState.convertSequenceOfLinksAndProtectionSegmentsToSequenceOfLinks(currentState.getRouteSequenceOfLinks(routeId)));
-		Set<Long> sec_seqLinks = new LinkedHashSet<Long>();
+		NetPlan netPlan = getDesign();
+		Route route = netPlan.getRouteFromId(routeId);
+		NetworkLayer layer = route.getLayer();
+		selectNetPlanViewItem(layer.getId(), Constants.NetworkElementType.ROUTE, routeId);
+		Map<Link, Pair<Color, Boolean>> coloredLinks = new HashMap<>();
 
-		if(routeOriginalLinks.get(routeId) != null)
-			sec_seqLinks = routeOriginalLinks.get(routeId);
-
-		if (allowShowInitialNetPlan())
+		for(Link link : route.getSeqLinksRealPath())
+			coloredLinks.put(link, Pair.of(Color.BLUE, false));
+		if(! route.getInitialSequenceOfLinks().equals(route.getSeqLinksRealPath()))
 		{
-			if (initialState.isLayerActive(layerId) && initialState.isRouteActive(layerId, routeId))
-				sec_seqLinks = new LinkedHashSet<Long>(initialState.convertSequenceOfLinksAndProtectionSegmentsToSequenceOfLinks(layerId, initialState.getRouteSequenceOfLinks(layerId, routeId)));
-
-			Iterator<Long> linkIt = sec_seqLinks.iterator();
-			while(linkIt.hasNext())
-			{
-				long linkId = linkIt.next();
-				if (!currentState.isLinkActive(linkId)) linkIt.remove();
-			}
+			for(Link link : route.getInitialSequenceOfLinks())
+				if(link.isDown())
+					coloredLinks.put(link, Pair.of(Color.RED, true));
 		}
-
-		topologyPanel.getCanvas().showRoutes(pri_seqLinks, sec_seqLinks);
+		topologyPanel.getCanvas().showAndPickNodesAndLinks(null, coloredLinks);
 		topologyPanel.getCanvas().refresh();
 	}
 }

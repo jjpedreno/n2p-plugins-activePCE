@@ -24,6 +24,7 @@ import java.io.OutputStream;
 import java.net.Inet4Address;
 import java.net.UnknownHostException;
 import java.util.Calendar;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -34,7 +35,6 @@ public class Utils
 	private final static String IP_ADDRESS_ATTRIBUTE_NAME            = "ipAddress";
 	private final static String SOURCE_INTERFACE_ATTRIBUTE_NAME      = "srcIf";
 	private final static String DESTINATION_INTERFACE_ATTRIBUTE_NAME = "dstIf";
-
 
 	public static int byteArrayToInt(byte[] array)
 	{
@@ -113,7 +113,6 @@ public class Utils
 		return - 1;
 	}
 
-
 	public static long getLinkDestinationInterface(NetPlan netPlan, long linkId)
 	{
 		Link link = netPlan.getLinkFromId(linkId);
@@ -126,11 +125,26 @@ public class Utils
 		return getNodeIPAddress(netPlan, link.getDestinationNode().getId());
 	}
 
-
 	public static long getLinkSourceInterface(NetPlan netPlan, long linkId)
 	{
 		Link link = netPlan.getLinkFromId(linkId);
 		return Long.parseLong(link.getAttribute(SOURCE_INTERFACE_ATTRIBUTE_NAME));
+	}
+
+	public static Set<Link> getLinksBySourceDestinationIPAddresses(NetPlan netPlan, NetworkLayer layer, Inet4Address sourceIP, Inet4Address destinationIP)
+	{
+		Set<Link> nodesSet = new LinkedHashSet<>();
+		List<Link> links = netPlan.getLinks(layer);
+		for(Link link : links)
+		{
+			Node originNode = link.getOriginNode();
+			Node destinationNode = link.getDestinationNode();
+			if(originNode.getAttribute(Constants.ATTRIBUTE_IP_ADDRESS).equals(sourceIP.getHostAddress()) && destinationNode.getAttribute(Constants.ATTRIBUTE_IP_ADDRESS).equals(destinationIP
+					.getHostAddress()))
+				nodesSet.add(link);
+		}
+		return nodesSet;
+
 	}
 
 	public static Inet4Address getLinkSourceIPAddress(NetPlan netPlan, long linkId) throws UnknownHostException
@@ -139,20 +153,28 @@ public class Utils
 		return getNodeIPAddress(netPlan, link.getOriginNode().getId());
 	}
 
-	public static long getNodeByIPAddress(NetPlan netPlan, Inet4Address inet4Address) throws UnknownHostException
+	public static long getNodeByIPAddress(NetPlan netPlan, Inet4Address inet4Address)
 	{
-		List<Node> nodes = netPlan.getNodes();
-		for(Node node : nodes)
-			if(getNodeIPAddress(netPlan, node.getId()).equals(inet4Address))
-				return node.getId();
+		try
+		{
+			List<Node> nodes = netPlan.getNodes();
+			for(Node node : nodes)
+				if(getNodeIPAddress(netPlan, node.getId()).equals(inet4Address))
+					return node.getId();
 
-		return - 1;
+			return - 1;
+		}catch(Throwable e){ return - 1;}
 	}
 
-	public static Inet4Address getNodeIPAddress(NetPlan netPlan, long nodeId) throws UnknownHostException
+	public static Inet4Address getNodeIPAddress(NetPlan netPlan, long nodeId)
 	{
-		Node node = netPlan.getNodeFromId(nodeId);
-		return (Inet4Address) Inet4Address.getByName(node.getAttribute(IP_ADDRESS_ATTRIBUTE_NAME));
+		try
+		{
+			Node node = netPlan.getNodeFromId(nodeId);
+			Inet4Address r = (Inet4Address) Inet4Address.getByName(node.getAttribute(IP_ADDRESS_ATTRIBUTE_NAME));
+			return r;
+		}catch(Throwable e){return null;}
+
 	}
 
 	/**

@@ -30,7 +30,9 @@ public class Constants
 	public final static String ATTRIBUTE_SOURCE_INTERFACE      = "srcIf";
 	public final static String ATTRIBUTE_DESTINATION_INTERFACE = "dstIf";
 	public final static String ATTRIBUTE_LSP_ID                = "lspId";
+	public final static String ATTRIBUTE_MAX_BIFURCATION       = "allowedBifurcationDegree";
+	public final static String ATTRIBUTE_MIN_BANDWIDTH         = "minBandwidthPerPathInGbps";
 
-	public final static String NODE_TYPE_ROUTER = "ipRouter";
-	public final static String NODE_TYPE_ROADM  = "roadm";
+	public final static String NODE_TYPE_IPROUTER = "ipRouter";
+	public final static String NODE_TYPE_ROADM    = "roadm";
 }

@@ -12,7 +12,6 @@
 
 package es.upct.girtel.net2plan.plugins.activepce.pce.bgp;
 
-import com.net2plan.internal.ErrorHandling;
 import es.tid.bgp.bgp4.messages.*;
 import es.tid.bgp.bgp4.open.BGP4CapabilitiesOptionalParameter;
 import es.tid.bgp.bgp4.open.BGP4Capability;
@@ -129,7 +128,7 @@ public class BGPHandler extends RequestHandler
 						}catch(Throwable e)
 						{
 							System.out.println("<< ERROR handling BGPUpdate");
-							if(Constants.DEBUG)	ErrorHandling.addErrorOrException(e, BGPHandler.class);
+							if(Constants.DEBUG)	e.printStackTrace();
 						}
 
 						for(Object msg : outMsg)
@@ -152,7 +151,7 @@ public class BGPHandler extends RequestHandler
 
 			}catch(Exception e)
 			{
-				if(Constants.DEBUG) ErrorHandling.addErrorOrException(e, BGPHandler.class);
+				if(Constants.DEBUG) e.printStackTrace();
 				_keepAlive = false;
 			}
 
