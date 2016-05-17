@@ -6,7 +6,7 @@
 
     <groupId>es.upct.girtel.net2plan</groupId>
     <artifactId>plugins.statefulactivepce</artifactId>
-    <version>1.0</version>
+    <version>1.1</version>
     <packaging>jar</packaging>
 
     <licenses>
@@ -109,7 +109,7 @@
 
 
     <build>
-        <finalName>net2plan-abnoPCE</finalName>
+        <finalName>net2plan-activePCE</finalName>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
