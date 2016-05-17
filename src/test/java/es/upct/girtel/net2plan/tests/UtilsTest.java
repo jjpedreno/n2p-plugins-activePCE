@@ -1,7 +1,7 @@
 package es.upct.girtel.net2plan.tests;
 
 import com.net2plan.interfaces.networkDesign.NetPlan;
-import es.upct.girtel.net2plan.plugins.abnopce.utils.Utils;
+import es.upct.girtel.net2plan.plugins.activepce.utils.Utils;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
