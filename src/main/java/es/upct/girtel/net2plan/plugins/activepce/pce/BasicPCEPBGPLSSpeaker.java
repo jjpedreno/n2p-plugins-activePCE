@@ -286,7 +286,7 @@ public class BasicPCEPBGPLSSpeaker extends IPCEEntity
 	private List handleFailureReparationEvent()
 	{
 		_wavelengthFiberOccupancy = WDMUtils.getMatrixWavelength2FiberOccupancy(_netPlan, true, _wdmLayer);
-		if(Constants.DEBUG) System.out.println("\tHandling failure event!"); //DEBUG
+		if(Constants.DEBUG) System.out.println("\tHandling failure event!");
 		try
 		{
 			List outMsg = new LinkedList();

@@ -895,7 +895,6 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 						case PCEPMessageTypes.MESSAGE_UPDATE:
 							PCEPUpdate updateMsg = new PCEPUpdate(msg);
 							updateOperationLog(">> PCEP UPDATE received ");
-							System.out.println("PCEP Message received after operation log"); //DEBUG
 							List<UpdateRequest> list = updateMsg.getUpdateRequestList();
 							updateOperationLog(updateMsg.toString());
 
