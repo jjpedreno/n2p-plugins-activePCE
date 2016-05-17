@@ -482,7 +482,7 @@ public class BasicPCEPBGPLSSpeaker extends IPCEEntity
 		{
 			Node node = _netPlan.addNode(0, 0, "", null);
 			node.setAttribute(Constants.ATTRIBUTE_IP_ADDRESS, ipAddress.getHostAddress());
-			node.setAttribute(Constants.ATTRIBUTE_NODE_TYPE, nodeNLRI.getRoutingUniverseIdentifier() == RoutingUniverseIdentifierTypes.Level3Identifier ? "ipRouter" : "roadm");
+			node.setAttribute(Constants.ATTRIBUTE_NODE_TYPE, nodeNLRI.getRoutingUniverseIdentifier() == RoutingUniverseIdentifierTypes.Level3Identifier ? Constants.NODE_TYPE_IPROUTER : Constants.NODE_TYPE_ROADM);
 
 			_ipNodeIdMap.put(ipAddress, node.getId());
 
