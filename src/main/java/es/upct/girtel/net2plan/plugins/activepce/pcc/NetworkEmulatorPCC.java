@@ -1150,8 +1150,11 @@ public class NetworkEmulatorPCC extends IGUINetworkViewer implements ActionListe
 		if(! route.getInitialSequenceOfLinks().equals(route.getSeqLinksRealPath()))
 		{
 			for(Link link : route.getInitialSequenceOfLinks())
+			{
+				coloredLinks.put(link, Pair.of(Color.BLUE, true));
 				if(link.isDown())
 					coloredLinks.put(link, Pair.of(Color.RED, true));
+			}
 		}
 		topologyPanel.getCanvas().showAndPickNodesAndLinks(null, coloredLinks);
 		topologyPanel.getCanvas().refresh();
