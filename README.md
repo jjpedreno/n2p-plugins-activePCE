@@ -20,3 +20,6 @@ Net2Plan is available at [www.net2plan.com](http://www.net2plan.com)
 **This plugin is compatible with version 0.4.0**
 
 To generate the JAR use the command: `mvn clean compile assembly:single` then put the resulting artifact (`net2plan-activePCE-jar-with-dependencies.jar`) in the Net2Plan subfolder `plugins`
+
+##Known issues
+Due to a bug in [netphony-network-protocols](https://github.com/telefonicaid/netphony-network-protocols) v.1.3.0 the Java Virtual Machine may enter an infinite loop when decoding a PCEPUpdate packet that contains several ERO objects. This situation occurs when restoring multiple lightpaths affected by the same fiber failure.
