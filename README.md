@@ -1,4 +1,4 @@
-# n2p-plugins-activePCE
+# Active Stateful PCE & PCC emulator Net2Plan Plugin
 Active Stateful Prototype PCE Plugin for Net2Plan
 
 This repository contains the first functional prototype of an active stateful PCE, and PCC emulator developed as a Net2Plan plugin. This plugins has been coded according with the standards defined in:
@@ -9,17 +9,17 @@ This repository contains the first functional prototype of an active stateful PC
 
 A thorough description of the operation and case studies is described in the paper:
 
-Jose-Luis Izquierdo-Zaragoza, Jose-Juan Pedreno-Manresa, Pablo Pavon-Marino, Oscar Gonzalez de Dios and Victor Lopez, **“Dynamic Operation of an IP/MPLS-over-WDM Network Using an Active Stateful BGP/LS-Enabled Multilayer PCE,”** in *Proceedings of the 18th International Conference on Transparent Optical Networks (ICTON 2016)*, Trento (Italy), July 2016.
+Jose-Luis Izquierdo-Zaragoza, Jose-Juan Pedreno-Manresa, Pablo Pavon-Marino, Oscar Gonzalez de Dios and Victor Lopez, **[“Dynamic Operation of an IP/MPLS-over-WDM Network Using an Active Stateful BGP/LS-Enabled Multilayer PCE,”](https://doi.org/10.1109/ICTON.2016.7550702)** in *Proceedings of the 18th International Conference on Transparent Optical Networks (ICTON 2016)*, Trento (Italy), July 2016.
 
 ## Requirements
 The user should be familiar with Java, and the use and development of Net2Plan.
 The project uses Maven, so all dependencies are self-managed. All dependencies are included as a local reository (folder `repo`) except for [netphony-protocols](https://github.com/telefonicaid/netphony-network-protocols).
 
-##Installation
+## Installation
 Net2Plan is available at [www.net2plan.com](http://www.net2plan.com)
 **This plugin is compatible with version 0.4.0**
 
 To generate the JAR use the command: `mvn clean compile assembly:single` then put the resulting artifact (`net2plan-activePCE-jar-with-dependencies.jar`) in the Net2Plan subfolder `plugins`
 
-##Known issues
+## Known issues
 Due to a bug in [netphony-network-protocols](https://github.com/telefonicaid/netphony-network-protocols) v.1.3.0 the Java Virtual Machine may enter an infinite loop when decoding a PCEPUpdate packet that contains several ERO objects. This situation occurs when restoring multiple lightpaths affected by the same fiber failure.
